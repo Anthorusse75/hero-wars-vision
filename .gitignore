@@ -9,12 +9,14 @@ __pycache__/
 # VS Code
 .vscode/
 
-# Images et fichiers générés volumineux
-data/samples/
-data/crops/
-data/reports/
-data/raw/
-data/exported/
+# Ignorer toutes les données générées et captures
+/data/*
+
+# Conserver uniquement les fichiers de référence
+!/data/catalog/
+!/data/catalog/**
+!/data/manifests/
+!/data/manifests/**
 
 # Futurs modèles entraînés
 models/

@@ -1,9 +1,27 @@
+# Environnement Python
 .venv/
-.env
 __pycache__/
-*.pyc
+*.py[cod]
 
-data/
-models/
+# Secrets
+.env
 
+# VS Code
 .vscode/
+
+# Images et fichiers générés volumineux
+data/samples/
+data/crops/
+data/reports/
+data/raw/
+data/exported/
+
+# Futurs modèles entraînés
+models/
+*.pt
+*.pth
+*.onnx
+
+# Fichiers système
+Thumbs.db
+.DS_Store

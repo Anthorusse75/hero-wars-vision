@@ -1,0 +1,35 @@
+ÉVALUATION RÉTROSPECTIVE — ARBITRAGE V4
+========================================================================
+
+Décisions humaines analysées : 366
+- V1 correcte : 251
+- V2 correcte : 28
+- Ni V1 ni V2 correcte : 87
+
+Cas résolus automatiquement par V4 : 214
+- Choix V1 : 206
+- Choix V2 : 8
+Décisions rétrospectivement correctes : 214
+Erreurs rétrospectives : 0
+Précision rétrospective : 100.00 %
+Réduction des revues historiques : 58.47 %
+
+Par lot :
+- hero_batch_002: 21/46 résolus, 21 corrects
+- hero_batch_003: 45/57 résolus, 45 corrects
+- hero_batch_004: 148/263 résolus, 148 corrects
+
+Règles déclenchées :
+- V1_STRONG_ATTEMPT: 97
+- V1_DUAL_CONFIDENCE: 48
+- V1_V2_LOST_LEADING_DIGITS: 17
+- V1_V2_LOW_CONFIDENCE: 12
+- V1_ORIGINAL_VERY_HIGH: 11
+- V1_DAMAGE_ORIGINAL_HIGH: 11
+- V2_V1_TRAILING_NOISE: 8
+- V1_CENTER_VARIANT_SUPPORTED: 6
+- V1_THREE_V2_VOTES_OVERRIDDEN: 4
+
+CSV détaillé : arbitration_v4_backtest.csv
+
+Important : cette mesure est rétrospective. Elle ne garantit pas une précision identique sur de nouvelles captures.

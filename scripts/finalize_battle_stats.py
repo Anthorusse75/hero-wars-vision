@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import shutil
 import sys
 from collections import Counter
@@ -10,19 +11,6 @@ from pathlib import Path
 from typing import Any
 
 
-BATCH_NAME = "hero_batch_002"
-
-BATCH_ROOT = Path("data/batches") / BATCH_NAME
-SOURCE_DIR = BATCH_ROOT / "reports" / "stat_ocr_v3"
-SOURCE_VALUES = SOURCE_DIR / "stat_values_arbitrated.csv"
-SOURCE_REVIEW = SOURCE_DIR / "review_cases.csv"
-
-OUTPUT_DIR = BATCH_ROOT / "validated"
-FINAL_VALUES = OUTPUT_DIR / "stat_values_final.csv"
-FINAL_STATS = OUTPUT_DIR / "battle_stats_final.csv"
-MANUAL_DECISIONS = OUTPUT_DIR / "manual_stat_decisions.csv"
-SUMMARY_PATH = OUTPUT_DIR / "battle_stats_validation_summary.txt"
-
 METRICS = (
     "power",
     "damage_dealt",
@@ -30,82 +18,58 @@ METRICS = (
     "healing",
 )
 
-# Valeurs lues visuellement dans les découpes et, lorsque nécessaire,
-# confirmées sur la capture complète.
-#
-# Clé : (screenshot_id, side, slot, metric)
-# Valeur : entier validé
-MANUAL_VALUES: dict[tuple[str, str, str, str], int] = {
-    ("24701", "L", "1", "damage_dealt"): 1_139_081,
-    ("24701", "R", "1", "damage_dealt"): 1_283_674,
-    ("24701", "R", "2", "damage_taken"): 1_113_917,
-    ("24809", "L", "2", "power"): 104_542,
-    ("28468", "L", "1", "power"): 177_079,
-    ("28468", "L", "2", "power"): 165_819,
-    ("28468", "R", "4", "healing"): 682_257,
-    ("28468", "R", "5", "damage_dealt"): 8_137,
-    ("29563", "R", "5", "damage_dealt"): 7_532,
-    ("30809", "L", "4", "power"): 169_791,
-    ("31047", "R", "1", "power"): 219_282,
-    ("31047", "R", "1", "damage_taken"): 637_897,
-    ("31047", "L", "2", "power"): 232_322,
-    ("31047", "L", "2", "damage_dealt"): 1_004_412,
-    ("31047", "R", "2", "power"): 203_911,
-    ("31047", "R", "3", "damage_dealt"): 148_140,
-    ("31047", "R", "3", "damage_taken"): 676_940,
-    ("31047", "L", "4", "power"): 232_230,
-    ("31047", "L", "4", "damage_dealt"): 228_702,
-    ("31047", "R", "4", "damage_dealt"): 88_928,
-    ("31047", "L", "5", "damage_dealt"): 7_316,
-    ("31047", "R", "5", "healing"): 85_323,
-    ("33031", "R", "4", "damage_taken"): 690_245,
-    ("33474", "R", "1", "power"): 241_896,
-    ("34279", "R", "5", "damage_taken"): 642_200,
-    ("35041", "L", "4", "damage_taken"): 97_337,
-    ("35041", "R", "4", "damage_dealt"): 160_757,
-    ("35041", "R", "4", "damage_taken"): 316_354,
-    ("35041", "L", "5", "damage_dealt"): 3_931,
-    ("35041", "L", "5", "damage_taken"): 486_447,
-    ("35041", "L", "5", "healing"): 175_618,
-    ("35041", "R", "5", "power"): 95_457,
-    ("35041", "R", "5", "damage_dealt"): 33_304,
-    ("35041", "R", "5", "damage_taken"): 1_227_876,
-    ("35632", "L", "4", "damage_dealt"): 17_569,
-    ("35632", "R", "4", "damage_dealt"): 23_188,
-    ("35632", "R", "4", "damage_taken"): 641_536,
-    ("35660", "R", "4", "damage_dealt"): 0,
-    ("35660", "R", "5", "power"): 179_605,
-    ("36257", "R", "2", "damage_taken"): 4_890_617,
-    ("36964", "L", "2", "power"): 162_149,
-    ("36964", "R", "4", "healing"): 808_189,
-    ("37112", "R", "4", "power"): 106_619,
-    ("37112", "R", "5", "damage_dealt"): 0,
-    ("37790", "R", "2", "damage_dealt"): 684_447,
-    ("38170", "R", "3", "damage_taken"): 1_117_365,
+EMPTY_SLOT_STATUSES = {
+    "EMPTY",
+    "EMPTY_SLOT",
 }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Applique les 46 décisions humaines finales aux statistiques "
-            "du batch 002 et produit les CSV validés."
+            "Finalise les statistiques OCR d'un lot à partir du résultat "
+            "d'arbitrage V3 et d'un CSV de décisions manuelles."
         )
+    )
+    parser.add_argument(
+        "--batch",
+        required=True,
+        help="Nom du lot, par exemple hero_batch_004.",
+    )
+    parser.add_argument(
+        "--decisions",
+        type=Path,
+        default=None,
+        help=(
+            "CSV des décisions manuelles. Par défaut : "
+            "data/batches/<batch>/reports/stat_ocr_v3/"
+            "manual_decisions.csv"
+        ),
     )
     parser.add_argument(
         "--apply",
         action="store_true",
         help=(
             "Écrit réellement les fichiers validés. Sans cette option, "
-            "le script effectue uniquement les contrôles."
+            "le script effectue uniquement une simulation."
         ),
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Autorise le remplacement des fichiers validés existants.",
+        help=(
+            "Autorise le remplacement des fichiers validés existants "
+            "avec sauvegarde préalable."
+        ),
     )
     return parser.parse_args()
+
+
+def validate_batch_name(batch_name: str) -> None:
+    if not re.fullmatch(r"hero_batch_\d{3}", batch_name):
+        raise RuntimeError(
+            "--batch doit avoir la forme hero_batch_004."
+        )
 
 
 def read_csv(
@@ -119,9 +83,18 @@ def read_csv(
         encoding="utf-8-sig",
         newline="",
     ) as stream:
-        reader = csv.DictReader(stream, delimiter=";")
+        reader = csv.DictReader(
+            stream,
+            delimiter=";",
+        )
         fieldnames = list(reader.fieldnames or [])
-        rows = list(reader)
+        rows = [
+            {
+                key: value or ""
+                for key, value in row.items()
+            }
+            for row in reader
+        ]
 
     if not fieldnames:
         raise RuntimeError(f"En-tête CSV absent : {path}")
@@ -154,153 +127,329 @@ def write_csv_atomic(
     temporary.replace(path)
 
 
-def row_key(row: dict[str, str]) -> tuple[str, str, str, str]:
+def row_key(
+    row: dict[str, str],
+) -> tuple[str, str, str, str]:
     return (
-        str(row.get("screenshot_id") or ""),
-        str(row.get("side") or ""),
-        str(row.get("slot") or ""),
-        str(row.get("metric") or ""),
+        str(row.get("screenshot_id") or "").strip(),
+        str(row.get("side") or "").strip().upper(),
+        str(row.get("slot") or "").strip(),
+        str(row.get("metric") or "").strip(),
     )
 
 
-def int_text(value: Any) -> str:
-    text = str(value if value is not None else "").strip()
+def slot_key(
+    row: dict[str, str],
+) -> tuple[str, str, str]:
+    key = row_key(row)
+    return key[0], key[1], key[2]
 
-    if not text:
-        return ""
+
+def is_empty_slot(row: dict[str, str]) -> bool:
+    return (
+        str(row.get("slot_status") or "")
+        .strip()
+        .upper()
+        in EMPTY_SLOT_STATUSES
+    )
+
+
+def ensure_digits(
+    value: str,
+    description: str,
+) -> str:
+    text = str(value or "").strip()
 
     if not text.isdigit():
-        raise RuntimeError(f"Valeur numérique invalide : {text!r}")
+        raise RuntimeError(
+            f"{description} invalide : {text!r}"
+        )
 
     return str(int(text))
 
 
-def build_final_rows(
-    source_rows: list[dict[str, str]],
-) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    final_rows: list[dict[str, str]] = []
-    decision_rows: list[dict[str, str]] = []
-    applied_keys: set[tuple[str, str, str, str]] = set()
+def validate_unique_keys(
+    rows: list[dict[str, str]],
+    description: str,
+) -> None:
+    counts = Counter(
+        row_key(row)
+        for row in rows
+    )
 
-    for source_row in source_rows:
-        row = dict(source_row)
-        key = row_key(row)
+    duplicates = [
+        key
+        for key, count in counts.items()
+        if count != 1
+    ]
 
-        if key in MANUAL_VALUES:
-            validated_value = str(MANUAL_VALUES[key])
-            applied_keys.add(key)
+    if duplicates:
+        raise RuntimeError(
+            f"{description} : clés absentes ou dupliquées :\n"
+            + "\n".join(
+                "- " + " ".join(key)
+                for key in sorted(duplicates)[:50]
+            )
+        )
 
-            decision_rows.append(
-                {
-                    "screenshot_id": key[0],
-                    "side": key[1],
-                    "slot": key[2],
-                    "hero_uid": row.get("hero_uid", ""),
-                    "hero_name": row.get("hero_name", ""),
-                    "metric": key[3],
-                    "v1_value": row.get("old_value", ""),
-                    "v2_value": row.get("value", ""),
-                    "validated_value": validated_value,
-                    "decision_source": "human_visual_review",
-                    "notes": (
-                        "Valeur lue sur la découpe V2 et, lorsque la découpe "
-                        "était ambiguë, confirmée sur la capture complète."
-                    ),
-                }
+
+def load_manual_decisions(
+    path: Path,
+) -> tuple[
+    list[str],
+    list[dict[str, str]],
+    dict[tuple[str, str, str, str], dict[str, str]],
+]:
+    fields, rows = read_csv(path)
+
+    required_fields = {
+        "screenshot_id",
+        "side",
+        "slot",
+        "metric",
+        "validated_value",
+    }
+
+    missing = sorted(
+        required_fields.difference(fields)
+    )
+
+    if missing:
+        raise RuntimeError(
+            "Colonnes absentes du CSV de décisions : "
+            + ", ".join(missing)
+        )
+
+    validate_unique_keys(
+        rows,
+        "CSV de décisions manuelles",
+    )
+
+    indexed: dict[
+        tuple[str, str, str, str],
+        dict[str, str],
+    ] = {}
+
+    for row in rows:
+        metric = row.get("metric", "")
+
+        if metric not in METRICS:
+            raise RuntimeError(
+                f"Métrique inconnue dans les décisions : {metric!r}"
             )
 
-            row["final_value"] = validated_value
-            row["arbitration_reason"] = "MANUAL_VISUAL_REVIEW"
-            row["review_required"] = "0"
-            row["manual_reviewed"] = "1"
-        else:
-            row["manual_reviewed"] = "0"
-
-        final_rows.append(row)
-
-    missing_decisions = set(MANUAL_VALUES).difference(applied_keys)
-
-    if missing_decisions:
-        details = "\n".join(
-            "- " + " ".join(key)
-            for key in sorted(missing_decisions)
-        )
-        raise RuntimeError(
-            "Certaines décisions ne correspondent à aucune ligne V3 :\n"
-            + details
+        row["validated_value"] = ensure_digits(
+            row.get("validated_value", ""),
+            "Valeur validée",
         )
 
-    return final_rows, decision_rows
+        indexed[row_key(row)] = row
+
+    return fields, rows, indexed
 
 
 def validate_review_coverage(
     review_rows: list[dict[str, str]],
+    decision_index: dict[
+        tuple[str, str, str, str],
+        dict[str, str],
+    ],
 ) -> None:
-    review_keys = {row_key(row) for row in review_rows}
-    decision_keys = set(MANUAL_VALUES)
+    review_keys = {
+        row_key(row)
+        for row in review_rows
+    }
+    decision_keys = set(decision_index)
 
-    missing = review_keys.difference(decision_keys)
-    extra = decision_keys.difference(review_keys)
+    missing = sorted(
+        review_keys.difference(decision_keys)
+    )
+    extra = sorted(
+        decision_keys.difference(review_keys)
+    )
 
-    if missing or extra:
-        messages: list[str] = []
+    if not missing and not extra:
+        return
 
-        if missing:
-            messages.append(
-                "Cas V3 sans décision :\n"
-                + "\n".join(
-                    "- " + " ".join(key)
-                    for key in sorted(missing)
-                )
+    messages: list[str] = []
+
+    if missing:
+        messages.append(
+            "Cas V3 sans décision manuelle :\n"
+            + "\n".join(
+                "- " + " ".join(key)
+                for key in missing[:50]
             )
+        )
 
-        if extra:
-            messages.append(
-                "Décisions absentes du fichier review_cases.csv :\n"
-                + "\n".join(
-                    "- " + " ".join(key)
-                    for key in sorted(extra)
-                )
+    if extra:
+        messages.append(
+            "Décisions sans cas correspondant dans review_cases.csv :\n"
+            + "\n".join(
+                "- " + " ".join(key)
+                for key in extra[:50]
             )
+        )
 
-        raise RuntimeError("\n\n".join(messages))
+    raise RuntimeError("\n\n".join(messages))
+
+
+def build_final_rows(
+    source_rows: list[dict[str, str]],
+    decision_index: dict[
+        tuple[str, str, str, str],
+        dict[str, str],
+    ],
+) -> tuple[
+    list[dict[str, str]],
+    list[dict[str, str]],
+]:
+    final_rows: list[dict[str, str]] = []
+    applied_decisions: list[dict[str, str]] = []
+    applied_keys: set[
+        tuple[str, str, str, str]
+    ] = set()
+
+    for source_row in source_rows:
+        row = dict(source_row)
+        key = row_key(row)
+        decision = decision_index.get(key)
+
+        if decision is None:
+            row["manual_reviewed"] = "0"
+            final_rows.append(row)
+            continue
+
+        validated_value = decision[
+            "validated_value"
+        ]
+        applied_keys.add(key)
+
+        row["final_value"] = validated_value
+        row["arbitration_reason"] = (
+            "MANUAL_VISUAL_REVIEW"
+        )
+        row["review_required"] = "0"
+        row["manual_reviewed"] = "1"
+
+        applied_decisions.append(
+            {
+                "screenshot_id": key[0],
+                "side": key[1],
+                "slot": key[2],
+                "slot_status": row.get(
+                    "slot_status",
+                    "",
+                ),
+                "hero_uid": row.get(
+                    "hero_uid",
+                    "",
+                ),
+                "hero_name": row.get(
+                    "hero_name",
+                    "",
+                ),
+                "metric": key[3],
+                "v1_value": row.get(
+                    "old_value",
+                    decision.get("v1_value", ""),
+                ),
+                "v2_value": row.get(
+                    "value",
+                    decision.get("v2_value", ""),
+                ),
+                "validated_value": validated_value,
+                "decision_source": decision.get(
+                    "decision_source",
+                    "human_visual_review",
+                ),
+                "notes": decision.get(
+                    "notes",
+                    "",
+                ),
+            }
+        )
+
+        final_rows.append(row)
+
+    unapplied = sorted(
+        set(decision_index).difference(applied_keys)
+    )
+
+    if unapplied:
+        raise RuntimeError(
+            "Décisions non appliquées au fichier V3 :\n"
+            + "\n".join(
+                "- " + " ".join(key)
+                for key in unapplied[:50]
+            )
+        )
+
+    return final_rows, applied_decisions
 
 
 def build_consolidated(
     final_rows: list[dict[str, str]],
 ) -> tuple[list[str], list[dict[str, str]]]:
-    by_slot: dict[tuple[str, str, str], dict[str, str]] = {}
+    by_slot: dict[
+        tuple[str, str, str],
+        dict[str, str],
+    ] = {}
+    seen_metrics: set[
+        tuple[str, str, str, str]
+    ] = set()
 
     for row in final_rows:
-        key = (
-            row.get("screenshot_id", ""),
-            row.get("side", ""),
-            row.get("slot", ""),
-        )
-
-        combined = by_slot.setdefault(
-            key,
-            {
-                "screenshot_id": key[0],
-                "side": key[1],
-                "slot": key[2],
-                "slot_status": row.get("slot_status", ""),
-                "hero_uid": row.get("hero_uid", ""),
-                "hero_name": row.get("hero_name", ""),
-            },
-        )
-
         metric = row.get("metric", "")
 
         if metric not in METRICS:
-            raise RuntimeError(f"Métrique inconnue : {metric!r}")
+            raise RuntimeError(
+                f"Métrique inconnue : {metric!r}"
+            )
 
-        combined[metric] = row.get("final_value", "")
+        current_slot = slot_key(row)
+        metric_key = (*current_slot, metric)
+
+        if metric_key in seen_metrics:
+            raise RuntimeError(
+                "Métrique dupliquée : "
+                + " ".join(metric_key)
+            )
+
+        seen_metrics.add(metric_key)
+
+        combined = by_slot.setdefault(
+            current_slot,
+            {
+                "screenshot_id": current_slot[0],
+                "side": current_slot[1],
+                "slot": current_slot[2],
+                "slot_status": row.get(
+                    "slot_status",
+                    "",
+                ),
+                "hero_uid": row.get(
+                    "hero_uid",
+                    "",
+                ),
+                "hero_name": row.get(
+                    "hero_name",
+                    "",
+                ),
+            },
+        )
+
+        combined[metric] = row.get(
+            "final_value",
+            "",
+        )
         combined[f"{metric}_source"] = row.get(
             "arbitration_reason",
             "",
         )
-        combined[f"{metric}_manual_reviewed"] = row.get(
+        combined[
+            f"{metric}_manual_reviewed"
+        ] = row.get(
             "manual_reviewed",
             "0",
         )
@@ -335,116 +484,194 @@ def build_consolidated(
     return fieldnames, consolidated_rows
 
 
-def validate_final_rows(
+def validate_final_state(
     final_rows: list[dict[str, str]],
     consolidated_rows: list[dict[str, str]],
+    manual_count: int,
 ) -> dict[str, int]:
-    review_remaining = sum(
-        str(row.get("review_required") or "0") == "1"
+    if len(final_rows) % len(METRICS) != 0:
+        raise RuntimeError(
+            "Le nombre de lignes numériques n'est pas divisible par 4."
+        )
+
+    remaining_review = sum(
+        str(row.get("review_required") or "0")
+        .strip()
+        == "1"
         for row in final_rows
     )
 
+    if remaining_review:
+        raise RuntimeError(
+            f"Il reste {remaining_review} valeurs à revoir."
+        )
+
     empty_numeric_rows = sum(
-        row.get("slot_status") == "EMPTY"
+        is_empty_slot(row)
         for row in final_rows
     )
 
     hero_numeric_rows = [
         row
         for row in final_rows
-        if row.get("slot_status") != "EMPTY"
+        if not is_empty_slot(row)
     ]
 
-    invalid_values = [
+    invalid_hero_values = [
         row_key(row)
         for row in hero_numeric_rows
-        if not str(row.get("final_value") or "").isdigit()
+        if not str(
+            row.get("final_value") or ""
+        ).isdigit()
     ]
 
-    if review_remaining:
-        raise RuntimeError(
-            f"Il reste {review_remaining} valeurs à revoir."
-        )
-
-    if invalid_values:
+    if invalid_hero_values:
         raise RuntimeError(
             "Valeurs finales absentes ou invalides :\n"
             + "\n".join(
                 "- " + " ".join(key)
-                for key in invalid_values[:30]
+                for key in invalid_hero_values[:50]
             )
         )
 
-    slots_with_missing_metric: list[str] = []
+    incomplete_slots: list[str] = []
 
     for row in consolidated_rows:
-        if row.get("slot_status") == "EMPTY":
-            continue
-
-        missing = [
+        missing_metrics = [
             metric
             for metric in METRICS
-            if not str(row.get(metric) or "").isdigit()
+            if metric not in row
         ]
 
-        if missing:
-            slots_with_missing_metric.append(
-                f"{row['screenshot_id']} {row['side']}{row['slot']} : "
-                + ", ".join(missing)
+        if missing_metrics:
+            incomplete_slots.append(
+                f"{row['screenshot_id']} "
+                f"{row['side']}{row['slot']} : "
+                + ", ".join(missing_metrics)
             )
+            continue
 
-    if slots_with_missing_metric:
+        if is_empty_slot(row):
+            non_empty_values = [
+                metric
+                for metric in METRICS
+                if str(row.get(metric) or "").strip()
+            ]
+
+            if non_empty_values:
+                incomplete_slots.append(
+                    f"{row['screenshot_id']} "
+                    f"{row['side']}{row['slot']} : "
+                    "emplacement vide avec valeurs numériques"
+                )
+        else:
+            invalid_metrics = [
+                metric
+                for metric in METRICS
+                if not str(
+                    row.get(metric) or ""
+                ).isdigit()
+            ]
+
+            if invalid_metrics:
+                incomplete_slots.append(
+                    f"{row['screenshot_id']} "
+                    f"{row['side']}{row['slot']} : "
+                    + ", ".join(invalid_metrics)
+                )
+
+    if incomplete_slots:
         raise RuntimeError(
-            "Emplacements incomplets :\n"
-            + "\n".join(slots_with_missing_metric[:30])
+            "Emplacements consolidés invalides :\n"
+            + "\n".join(incomplete_slots[:50])
+        )
+
+    expected_slots = (
+        len(final_rows) // len(METRICS)
+    )
+
+    if len(consolidated_rows) != expected_slots:
+        raise RuntimeError(
+            f"{expected_slots} emplacements attendus, "
+            f"{len(consolidated_rows)} obtenus."
+        )
+
+    hero_slots = sum(
+        not is_empty_slot(row)
+        for row in consolidated_rows
+    )
+    empty_slots = sum(
+        is_empty_slot(row)
+        for row in consolidated_rows
+    )
+
+    if empty_numeric_rows != empty_slots * len(METRICS):
+        raise RuntimeError(
+            "Le nombre de lignes numériques vides ne correspond pas "
+            "au nombre d'emplacements vides."
+        )
+
+    actual_manual_count = sum(
+        row.get("manual_reviewed") == "1"
+        for row in final_rows
+    )
+
+    if actual_manual_count != manual_count:
+        raise RuntimeError(
+            f"{manual_count} décisions manuelles attendues, "
+            f"{actual_manual_count} appliquées."
         )
 
     return {
         "numeric_rows": len(final_rows),
-        "hero_numeric_rows": len(hero_numeric_rows),
-        "empty_numeric_rows": empty_numeric_rows,
+        "hero_numeric_rows": len(
+            hero_numeric_rows
+        ),
+        "empty_numeric_rows": (
+            empty_numeric_rows
+        ),
         "slots": len(consolidated_rows),
-        "hero_slots": sum(
-            row.get("slot_status") != "EMPTY"
-            for row in consolidated_rows
-        ),
-        "empty_slots": sum(
-            row.get("slot_status") == "EMPTY"
-            for row in consolidated_rows
-        ),
-        "manual_values": sum(
-            row.get("manual_reviewed") == "1"
-            for row in final_rows
+        "hero_slots": hero_slots,
+        "empty_slots": empty_slots,
+        "manual_values": actual_manual_count,
+        "automatic_values": (
+            len(hero_numeric_rows)
+            - actual_manual_count
         ),
     }
 
 
-def backup_existing_outputs() -> Path | None:
+def backup_existing_outputs(
+    paths: list[Path],
+    output_dir: Path,
+) -> Path | None:
     existing = [
         path
-        for path in (
-            FINAL_VALUES,
-            FINAL_STATS,
-            MANUAL_DECISIONS,
-            SUMMARY_PATH,
-        )
+        for path in paths
         if path.exists()
     ]
 
     if not existing:
         return None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
     backup_dir = (
-        BATCH_ROOT
-        / "validated"
+        output_dir
         / "backups"
         / f"battle_stats_{timestamp}"
     )
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_dir.mkdir(
+        parents=True,
+        exist_ok=False,
+    )
 
     for path in existing:
-        shutil.copy2(path, backup_dir / path.name)
+        shutil.copy2(
+            path,
+            backup_dir / path.name,
+        )
 
     return backup_dir
 
@@ -453,28 +680,115 @@ def main() -> int:
     args = parse_args()
 
     try:
-        source_fields, source_rows = read_csv(SOURCE_VALUES)
-        _, review_rows = read_csv(SOURCE_REVIEW)
+        validate_batch_name(args.batch)
 
-        validate_review_coverage(review_rows)
+        batch_root = (
+            Path("data/batches")
+            / args.batch
+        )
+        source_dir = (
+            batch_root
+            / "reports"
+            / "stat_ocr_v3"
+        )
+        source_values = (
+            source_dir
+            / "stat_values_arbitrated.csv"
+        )
+        source_review = (
+            source_dir
+            / "review_cases.csv"
+        )
+        decisions_path = (
+            args.decisions
+            if args.decisions is not None
+            else source_dir
+            / "manual_decisions.csv"
+        )
 
-        final_rows, decision_rows = build_final_rows(source_rows)
+        output_dir = (
+            batch_root
+            / "validated"
+        )
+        final_values_path = (
+            output_dir
+            / "stat_values_final.csv"
+        )
+        final_stats_path = (
+            output_dir
+            / "battle_stats_final.csv"
+        )
+        manual_output_path = (
+            output_dir
+            / "manual_stat_decisions.csv"
+        )
+        summary_path = (
+            output_dir
+            / "battle_stats_validation_summary.txt"
+        )
+
+        source_fields, source_rows = read_csv(
+            source_values
+        )
+        _, review_rows = read_csv(
+            source_review
+        )
+        (
+            _,
+            decision_rows,
+            decision_index,
+        ) = load_manual_decisions(
+            decisions_path
+        )
+
+        validate_unique_keys(
+            source_rows,
+            "Résultats V3",
+        )
+        validate_unique_keys(
+            review_rows,
+            "Cas V3 à revoir",
+        )
+        validate_review_coverage(
+            review_rows,
+            decision_index,
+        )
+
+        final_rows, applied_decisions = (
+            build_final_rows(
+                source_rows,
+                decision_index,
+            )
+        )
 
         final_fields = list(source_fields)
 
         if "manual_reviewed" not in final_fields:
-            final_fields.append("manual_reviewed")
+            final_fields.append(
+                "manual_reviewed"
+            )
 
-        consolidated_fields, consolidated_rows = build_consolidated(
-            final_rows
-        )
-        validation = validate_final_rows(
+        (
+            consolidated_fields,
+            consolidated_rows,
+        ) = build_consolidated(final_rows)
+
+        validation = validate_final_state(
             final_rows,
             consolidated_rows,
+            len(decision_rows),
         )
 
-    except (RuntimeError, csv.Error, ValueError) as error:
-        print(f"Erreur : {error}", file=sys.stderr)
+    except (
+        RuntimeError,
+        csv.Error,
+        OSError,
+        ValueError,
+    ) as error:
+        print(
+            f"Erreur : {error}",
+            file=sys.stderr,
+        )
         return 1
 
     reason_counts = Counter(
@@ -482,60 +796,112 @@ def main() -> int:
         for row in final_rows
     )
 
-    print("FINALISATION DES STATISTIQUES — HERO_BATCH_002")
+    print(
+        "FINALISATION DES STATISTIQUES — "
+        f"{args.batch.upper()}"
+    )
     print("=" * 72)
     print()
-    print(f"Valeurs numériques analysées : {validation['numeric_rows']}")
-    print(f"Valeurs de héros validées    : {validation['hero_numeric_rows']}")
-    print(f"Valeurs vides ignorées       : {validation['empty_numeric_rows']}")
-    print(f"Valeurs revues manuellement  : {validation['manual_values']}")
-    print(f"Emplacements de héros        : {validation['hero_slots']}")
-    print(f"Emplacements vides           : {validation['empty_slots']}")
+    print(
+        "Valeurs numériques analysées : "
+        f"{validation['numeric_rows']}"
+    )
+    print(
+        "Valeurs de héros validées    : "
+        f"{validation['hero_numeric_rows']}"
+    )
+    print(
+        "Valeurs vides ignorées       : "
+        f"{validation['empty_numeric_rows']}"
+    )
+    print(
+        "Valeurs revues manuellement  : "
+        f"{validation['manual_values']}"
+    )
+    print(
+        "Valeurs validées automatiquement : "
+        f"{validation['automatic_values']}"
+    )
+    print(
+        "Emplacements de héros        : "
+        f"{validation['hero_slots']}"
+    )
+    print(
+        "Emplacements vides           : "
+        f"{validation['empty_slots']}"
+    )
     print("Cas restant à revoir         : 0")
     print()
     print("Origine des valeurs finales :")
 
     for reason, count in reason_counts.most_common():
-        print(f"- {reason:<34} : {count}")
+        print(
+            f"- {reason:<34} : {count}"
+        )
 
-    summary = "\n".join(
+    summary_lines = [
+        "STATISTIQUES VALIDÉES — "
+        f"{args.batch.upper()}",
+        "=" * 72,
+        "",
+        "Valeurs numériques analysées : "
+        f"{validation['numeric_rows']}",
+        "Valeurs appartenant à des héros : "
+        f"{validation['hero_numeric_rows']}",
+        "Valeurs d'emplacement vide ignorées : "
+        f"{validation['empty_numeric_rows']}",
+        "Valeurs revues manuellement : "
+        f"{validation['manual_values']}",
+        "Valeurs validées automatiquement : "
+        f"{validation['automatic_values']}",
+        "Emplacements contenant un héros : "
+        f"{validation['hero_slots']}",
+        "Emplacements vides : "
+        f"{validation['empty_slots']}",
+        "Cas restant à revoir : 0",
+        "",
+        "Origine des valeurs finales :",
+    ]
+
+    for reason, count in reason_counts.most_common():
+        summary_lines.append(
+            f"- {reason}: {count}"
+        )
+
+    summary_lines.extend(
         [
-            "STATISTIQUES VALIDÉES — HERO_BATCH_002",
-            "=" * 72,
             "",
-            f"Valeurs numériques analysées : {validation['numeric_rows']}",
-            f"Valeurs appartenant à des héros : {validation['hero_numeric_rows']}",
-            f"Valeurs d'emplacement vide ignorées : {validation['empty_numeric_rows']}",
-            f"Valeurs revues manuellement : {validation['manual_values']}",
-            f"Emplacements contenant un héros : {validation['hero_slots']}",
-            f"Emplacements vides : {validation['empty_slots']}",
-            "Cas restant à revoir : 0",
-            "",
-            "Important : 46 valeurs ambiguës ont été vérifiées visuellement.",
-            "Les 3 950 autres valeurs proviennent de l'arbitrage automatique V3.",
-            "Le lot complet n'a pas été annoté manuellement valeur par valeur.",
+            "Important : seules les valeurs signalées par l'arbitrage "
+            "V3 ont été vérifiées manuellement.",
+            "Les autres valeurs proviennent de l'arbitrage automatique.",
             "",
         ]
     )
 
     if not args.apply:
         print()
-        print("MODE SIMULATION : aucun fichier n'a été modifié.")
+        print(
+            "MODE SIMULATION : aucun fichier "
+            "n'a été modifié."
+        )
         print()
         print("Pour appliquer :")
         print(
-            "python scripts/finalize_battle_stats.py --apply"
+            "python scripts/finalize_battle_stats.py "
+            f"--batch {args.batch} --apply"
         )
         return 0
 
+    output_paths = [
+        final_values_path,
+        final_stats_path,
+        manual_output_path,
+        summary_path,
+    ]
+
     existing_outputs = [
         path
-        for path in (
-            FINAL_VALUES,
-            FINAL_STATS,
-            MANUAL_DECISIONS,
-            SUMMARY_PATH,
-        )
+        for path in output_paths
         if path.exists()
     ]
 
@@ -547,12 +913,16 @@ def main() -> int:
         )
         return 2
 
-    backup_dir = backup_existing_outputs()
+    backup_dir = backup_existing_outputs(
+        output_paths,
+        output_dir,
+    )
 
-    decision_fields = [
+    manual_output_fields = [
         "screenshot_id",
         "side",
         "slot",
+        "slot_status",
         "hero_uid",
         "hero_name",
         "metric",
@@ -564,33 +934,49 @@ def main() -> int:
     ]
 
     write_csv_atomic(
-        FINAL_VALUES,
+        final_values_path,
         final_fields,
         final_rows,
     )
     write_csv_atomic(
-        FINAL_STATS,
+        final_stats_path,
         consolidated_fields,
         consolidated_rows,
     )
     write_csv_atomic(
-        MANUAL_DECISIONS,
-        decision_fields,
-        decision_rows,
+        manual_output_path,
+        manual_output_fields,
+        applied_decisions,
     )
 
-    SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SUMMARY_PATH.write_text(summary, encoding="utf-8")
+    summary_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    summary_path.write_text(
+        "\n".join(summary_lines),
+        encoding="utf-8",
+    )
 
     print()
     print("Finalisation appliquée.")
-    print(f"Valeurs détaillées : {FINAL_VALUES}")
-    print(f"Table par héros     : {FINAL_STATS}")
-    print(f"Décisions manuelles : {MANUAL_DECISIONS}")
-    print(f"Résumé              : {SUMMARY_PATH}")
+    print(
+        f"Valeurs détaillées : {final_values_path}"
+    )
+    print(
+        f"Table par héros     : {final_stats_path}"
+    )
+    print(
+        f"Décisions manuelles : {manual_output_path}"
+    )
+    print(
+        f"Résumé              : {summary_path}"
+    )
 
     if backup_dir is not None:
-        print(f"Sauvegarde précédente : {backup_dir}")
+        print(
+            f"Sauvegarde précédente : {backup_dir}"
+        )
 
     return 0
 

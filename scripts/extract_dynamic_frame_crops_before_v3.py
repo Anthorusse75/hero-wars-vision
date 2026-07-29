@@ -52,16 +52,15 @@ INNER_RIGHT = 0.945
 INNER_BOTTOM = 0.91
 
 # Zone du nom, calculée relativement au cadre de l'avatar.
-NAME_GAP_IN_FRAME_WIDTHS = -0.10
-NAME_WIDTH_IN_FRAME_WIDTHS = 2.30
+NAME_GAP_IN_FRAME_WIDTHS = 0.10
+NAME_WIDTH_IN_FRAME_WIDTHS = 2.10
 NAME_TOP_IN_FRAME_HEIGHTS = 0.02
 NAME_BOTTOM_IN_FRAME_HEIGHTS = 0.40
 
-# La zone commence légèrement à l'intérieur du cadre de l'avatar afin de ne
-# jamais couper la première lettre lorsque la largeur du cadre est surestimée.
-# La largeur horizontale reste généreuse pour les noms longs. La réduction
-# verticale suffit à éviter les valeurs de puissance et les barres.
-NAME_ADJACENT_WIDTH_KEEP_RATIO = 1.00
+# La première zone est volontairement assez large pour accepter les noms longs.
+# On ne conserve ensuite que la partie adjacente à l'avatar et le haut de la
+# bande, afin d'éliminer les valeurs de puissance et les barres de statistiques.
+NAME_ADJACENT_WIDTH_KEEP_RATIO = 0.80
 NAME_TOP_BAND_KEEP_RATIO = 0.68
 
 

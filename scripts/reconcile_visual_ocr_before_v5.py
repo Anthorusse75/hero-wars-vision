@@ -73,13 +73,10 @@ VISUAL_ACCEPTED = "ACCEPTED"
 VISUAL_ONE_EDIT_MIN_SIMILARITY = 0.90
 VISUAL_ONE_EDIT_MIN_MARGIN = 0.02
 VISUAL_SHORT_ONE_EDIT_MIN_SIMILARITY = 0.91
-VISUAL_SHORT_ONE_EDIT_MIN_MARGIN = 0.03
-VISUAL_TWO_EDIT_MIN_SIMILARITY = 0.92
-VISUAL_TWO_EDIT_MIN_MARGIN = 0.04
-VISUAL_TWO_EDIT_MIN_LENGTH = 5
+VISUAL_SHORT_ONE_EDIT_MIN_MARGIN = 0.04
 VISUAL_TRUNCATION_MIN_SIMILARITY = 0.90
 VISUAL_TRUNCATION_MIN_MARGIN = 0.02
-VISUAL_TRUNCATION_MIN_LENGTH = 3
+VISUAL_TRUNCATION_MIN_LENGTH = 7
 VISUAL_TRUNCATION_MIN_COVERAGE = 0.60
 
 # Pour un résultat visuel REVIEW, on n'autorise qu'une correction OCR
@@ -87,14 +84,7 @@ VISUAL_TRUNCATION_MIN_COVERAGE = 0.60
 # similarité et marge visuelles minimales.
 VISUAL_REVIEW_ONE_EDIT_MIN_SIMILARITY = 0.88
 VISUAL_REVIEW_ONE_EDIT_MIN_MARGIN = 0.03
-VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE = 0.50
-
-# Un résultat REVIEW peut aussi être confirmé par un alias exact précédé
-# ou suivi d'un petit parasite, même si la confiance OCR brute est faible,
-# lorsque la marge visuelle est très nette.
-VISUAL_REVIEW_EDGE_MIN_SIMILARITY = 0.88
-VISUAL_REVIEW_EDGE_MIN_MARGIN = 0.08
-VISUAL_REVIEW_EDGE_MIN_OCR_CONFIDENCE = 0.30
+VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE = 0.95
 
 # Alias validés humainement pendant la revue du batch 002.
 # L'option --apply-reviewed-aliases les ajoute au catalogue avec sauvegarde.
@@ -785,35 +775,11 @@ def match_ocr_with_visual_identity(
     if not visual_entries:
         return None
 
-    # Pour un statut REVIEW, on accepte deux corrections très encadrées :
-    # 1. un alias exact après retrait d'un petit parasite de bord ;
-    # 2. une seule erreur OCR sur un nom de même longueur.
+    # Un statut REVIEW n'est pas assez solide pour autoriser les règles
+    # générales de troncature ou de suppression de parasites. On accepte
+    # uniquement un nom OCR très fiable, de même longueur, à une édition
+    # du héros proposé visuellement.
     if visual_status == "REVIEW":
-        edge_cleaned_key = remove_edge_noise_tokens(alias_key)
-
-        if (
-            edge_cleaned_key
-            and edge_cleaned_key != alias_key
-            and ocr_confidence
-            >= VISUAL_REVIEW_EDGE_MIN_OCR_CONFIDENCE
-            and visual_is_strong_enough(
-                visual_similarity,
-                visual_margin,
-                VISUAL_REVIEW_EDGE_MIN_SIMILARITY,
-                VISUAL_REVIEW_EDGE_MIN_MARGIN,
-            )
-        ):
-            for entry in visual_entries:
-                if edge_cleaned_key == entry["alias_key"]:
-                    return visual_identity_match(
-                        visual_uid=visual_uid,
-                        entry=entry,
-                        alias_key=alias_key,
-                        cleaned_alias_key=edge_cleaned_key,
-                        method="VISUAL_REVIEW_ALIAS_EDGE_NOISE",
-                        score=1.0,
-                    )
-
         if (
             ocr_confidence
             < VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE
@@ -899,50 +865,6 @@ def match_ocr_with_visual_identity(
                     score=1.0,
                 )
 
-    # 1 bis. Après retrait d'un petit token parasite, il peut rester
-    # une seule erreur OCR dans le nom lui-même :
-    # "Morriaan I" -> "Morrigan", "Y Ova" -> "Oya",
-    # "Y Bvrna" -> "Byrna", "I Judae" -> "Judge".
-    edge_cleaned_key = remove_edge_noise_tokens(alias_key)
-
-    if edge_cleaned_key and edge_cleaned_key != alias_key:
-        for entry in visual_entries:
-            known_key = entry["alias_key"]
-
-            if (
-                len(edge_cleaned_key) != len(known_key)
-                or len(known_key) < 3
-            ):
-                continue
-
-            if len(known_key) == 3:
-                strong_enough = visual_is_strong_enough(
-                    visual_similarity,
-                    visual_margin,
-                    VISUAL_SHORT_ONE_EDIT_MIN_SIMILARITY,
-                    VISUAL_SHORT_ONE_EDIT_MIN_MARGIN,
-                )
-            else:
-                strong_enough = visual_is_strong_enough(
-                    visual_similarity,
-                    visual_margin,
-                    VISUAL_ONE_EDIT_MIN_SIMILARITY,
-                    VISUAL_ONE_EDIT_MIN_MARGIN,
-                )
-
-            if (
-                strong_enough
-                and edit_distance(edge_cleaned_key, known_key) == 1
-            ):
-                return visual_identity_match(
-                    visual_uid=visual_uid,
-                    entry=entry,
-                    alias_key=alias_key,
-                    cleaned_alias_key=known_key,
-                    method="VISUAL_ALIAS_EDGE_NOISE_ONE_EDIT",
-                    score=1.0 - 1.0 / len(known_key),
-                )
-
     # 2. Une seule insertion, suppression ou substitution sur l'ensemble
     # du nom, espaces compris. Les noms de trois caractères exigent un
     # visuel plus solide afin d'éviter les faux positifs.
@@ -989,38 +911,8 @@ def match_ocr_with_visual_identity(
                 ),
             )
 
-    # 3. Deux erreurs OCR sur un nom d'au moins cinq caractères,
-    # uniquement lorsque l'identité visuelle ACCEPTED est très solide.
-    # Cette règle couvre notamment des permutations ou substitutions comme
-    # "Eolfo" pour "Folio" et "Dolaric" pour "Polaris".
-    if visual_is_strong_enough(
-        visual_similarity,
-        visual_margin,
-        VISUAL_TWO_EDIT_MIN_SIMILARITY,
-        VISUAL_TWO_EDIT_MIN_MARGIN,
-    ):
-        for entry in visual_entries:
-            known_key = entry["alias_key"]
-
-            if (
-                len(alias_key) != len(known_key)
-                or len(known_key) < VISUAL_TWO_EDIT_MIN_LENGTH
-            ):
-                continue
-
-            if edit_distance(alias_key, known_key) == 2:
-                return visual_identity_match(
-                    visual_uid=visual_uid,
-                    entry=entry,
-                    alias_key=alias_key,
-                    cleaned_alias_key=known_key,
-                    method="VISUAL_ALIAS_TWO_EDIT_OCR",
-                    score=1.0 - 2.0 / len(known_key),
-                )
-
-    # 4 et 5. Le recadrage du nom peut supprimer le début ou la fin
-    # d'un nom. On exige une portion observée d'au moins 60 % du nom
-    # connu et une identité visuelle solide.
+    # 3 et 4. Le recadrage du nom peut supprimer le début ou la fin
+    # d'un nom long. On exige une portion observée suffisamment longue,
     # au moins 60 % du nom connu, et une identité visuelle solide.
     if not visual_is_strong_enough(
         visual_similarity,
@@ -1184,17 +1076,7 @@ def reconcile_row(
         and visual_status
         in {VISUAL_ACCEPTED, "REVIEW"}
         and ocr_text
-        and (
-            (
-                visual_status == VISUAL_ACCEPTED
-                and ocr_confidence >= OCR_HIGH
-            )
-            or (
-                visual_status == "REVIEW"
-                and ocr_confidence
-                >= VISUAL_REVIEW_EDGE_MIN_OCR_CONFIDENCE
-            )
-        )
+        and ocr_confidence >= OCR_HIGH
     ):
         identity_match = (
             match_ocr_with_visual_identity(
@@ -1259,20 +1141,7 @@ def reconcile_row(
                 review_required = 0
 
             elif (
-                ocr_confidence >= OCR_MEDIUM
-                or (
-                    ocr_match_method
-                    in {
-                        "EXACT_ALIAS",
-                        "VISUAL_REVIEW_ALIAS_EDGE_NOISE",
-                    }
-                    and visual_is_strong_enough(
-                        visual_similarity,
-                        visual_margin,
-                        VISUAL_REVIEW_EDGE_MIN_SIMILARITY,
-                        VISUAL_REVIEW_EDGE_MIN_MARGIN,
-                    )
-                )
+                ocr_confidence >= OCR_HIGH
             ):
                 decision = "RESCUED_BY_OCR"
                 review_required = 0
@@ -1283,26 +1152,7 @@ def reconcile_row(
                 )
 
         else:
-            # Lorsque le visuel est seulement REVIEW, avec une marge très
-            # faible, un nom OCR exact et très fiable est plus probant que
-            # le voisin visuel proposé. Cette règle ne s'applique jamais à
-            # un visuel ACCEPTED.
-            if (
-                visual_status == "REVIEW"
-                and ocr_confidence >= OCR_HIGH
-                and ocr_match_method
-                in {"EXACT_ALIAS", "FUZZY_ALIAS"}
-                and visual_margin <= 0.015
-            ):
-                final_hero_uid = ocr_uid
-                final_hero_name = hero_names.get(
-                    ocr_uid,
-                    str(catalog_match["matched_alias"]),
-                )
-                decision = "RESCUED_BY_OCR"
-                review_required = 0
-            else:
-                decision = "CONFLICT"
+            decision = "CONFLICT"
 
     elif visual_status == VISUAL_ACCEPTED:
         final_hero_uid = visual_uid
@@ -2110,17 +1960,7 @@ def main() -> int:
         1
         for row in result_rows
         if row["ocr_match_method"]
-        in {
-            "VISUAL_ALIAS_EDGE_NOISE",
-            "VISUAL_REVIEW_ALIAS_EDGE_NOISE",
-        }
-    )
-
-    corrected_edge_noise_one_edit = sum(
-        1
-        for row in result_rows
-        if row["ocr_match_method"]
-        == "VISUAL_ALIAS_EDGE_NOISE_ONE_EDIT"
+        == "VISUAL_ALIAS_EDGE_NOISE"
     )
 
     corrected_one_edit = sum(
@@ -2131,13 +1971,6 @@ def main() -> int:
             "VISUAL_ALIAS_ONE_EDIT_OCR",
             "VISUAL_REVIEW_ALIAS_ONE_EDIT_OCR",
         }
-    )
-
-    corrected_two_edit = sum(
-        1
-        for row in result_rows
-        if row["ocr_match_method"]
-        == "VISUAL_ALIAS_TWO_EDIT_OCR"
     )
 
     corrected_truncation = sum(
@@ -2182,17 +2015,8 @@ def main() -> int:
         f"{corrected_edge_noise}"
     )
     print(
-        "- Parasites + 1 erreur OCR : "
-        f"{corrected_edge_noise_one_edit}"
-    )
-    print(
         "- Erreurs OCR à 1 caractère : "
         f"{corrected_one_edit}"
-    )
-
-    print(
-        "- Erreurs OCR à 2 caractères : "
-        f"{corrected_two_edit}"
     )
     print(
         "- Noms tronqués corrigés : "

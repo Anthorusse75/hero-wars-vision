@@ -68,24 +68,6 @@ OCR_MEDIUM = 0.60
 
 VISUAL_ACCEPTED = "ACCEPTED"
 
-# Corrections OCR guidées par une identité visuelle déjà ACCEPTED.
-# Elles ne créent jamais d'alias dans le catalogue.
-VISUAL_ONE_EDIT_MIN_SIMILARITY = 0.90
-VISUAL_ONE_EDIT_MIN_MARGIN = 0.02
-VISUAL_SHORT_ONE_EDIT_MIN_SIMILARITY = 0.91
-VISUAL_SHORT_ONE_EDIT_MIN_MARGIN = 0.04
-VISUAL_TRUNCATION_MIN_SIMILARITY = 0.90
-VISUAL_TRUNCATION_MIN_MARGIN = 0.02
-VISUAL_TRUNCATION_MIN_LENGTH = 7
-VISUAL_TRUNCATION_MIN_COVERAGE = 0.60
-
-# Pour un résultat visuel REVIEW, on n'autorise qu'une correction OCR
-# très encadrée : même longueur, une seule édition, OCR très fiable,
-# similarité et marge visuelles minimales.
-VISUAL_REVIEW_ONE_EDIT_MIN_SIMILARITY = 0.88
-VISUAL_REVIEW_ONE_EDIT_MIN_MARGIN = 0.03
-VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE = 0.95
-
 # Alias validés humainement pendant la revue du batch 002.
 # L'option --apply-reviewed-aliases les ajoute au catalogue avec sauvegarde.
 REVIEWED_ALIAS_ADDITIONS = (
@@ -705,59 +687,24 @@ def match_ocr_to_catalog(
     )
 
 
-def visual_identity_match(
-    visual_uid: str,
-    entry: dict[str, str],
-    alias_key: str,
-    cleaned_alias_key: str,
-    method: str,
-    score: float,
-) -> dict[str, object]:
-    return {
-        "matched_hero_uid": visual_uid,
-        "matched_alias": entry["alias"],
-        "match_method": method,
-        "match_score": score,
-        "ambiguous": False,
-        "alias_key": alias_key,
-        "cleaned_alias_key": cleaned_alias_key,
-    }
-
-
-def visual_is_strong_enough(
-    visual_similarity: float,
-    visual_margin: float,
-    minimum_similarity: float,
-    minimum_margin: float,
-) -> bool:
-    return (
-        visual_similarity >= minimum_similarity
-        and visual_margin >= minimum_margin
-    )
-
-
 def match_ocr_with_visual_identity(
     ocr_text: str,
     visual_uid: str,
-    visual_status: str,
     visual_similarity: float,
     visual_margin: float,
-    ocr_confidence: float,
     entries_by_hero: dict[
         str,
         list[dict[str, str]],
     ],
 ) -> dict[str, object] | None:
     """
-    Corrige prudemment l'OCR en se limitant au héros déjà reconnu visuellement.
+    Deux corrections prudentes, limitées au héros déjà reconnu visuellement :
 
-    Les corrections acceptées sont :
-    1. petits blocs parasites situés aux extrémités ;
-    2. une erreur d'édition sur un nom de même longueur ;
-    3. un nom suffisamment long tronqué à gauche ou à droite ;
-    4. une troncature accompagnée d'une seule erreur OCR.
+    1. suppression des blocs parasites de 1 ou 2 caractères placés aux bords ;
+    2. correction d'une seule substitution OCR, uniquement pour un mot
+       de même longueur et avec un visuel solide.
 
-    Ces corrections ne deviennent jamais des alias de catalogue.
+    Cette fonction ne transforme pas ces erreurs en alias de catalogue.
     """
 
     alias_key = normalize_alias_key(
@@ -775,51 +722,8 @@ def match_ocr_with_visual_identity(
     if not visual_entries:
         return None
 
-    # Un statut REVIEW n'est pas assez solide pour autoriser les règles
-    # générales de troncature ou de suppression de parasites. On accepte
-    # uniquement un nom OCR très fiable, de même longueur, à une édition
-    # du héros proposé visuellement.
-    if visual_status == "REVIEW":
-        if (
-            ocr_confidence
-            < VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE
-            or not visual_is_strong_enough(
-                visual_similarity,
-                visual_margin,
-                VISUAL_REVIEW_ONE_EDIT_MIN_SIMILARITY,
-                VISUAL_REVIEW_ONE_EDIT_MIN_MARGIN,
-            )
-        ):
-            return None
-
-        for entry in visual_entries:
-            known_key = entry["alias_key"]
-
-            if (
-                len(alias_key) != len(known_key)
-                or len(known_key) < 4
-            ):
-                continue
-
-            if edit_distance(alias_key, known_key) == 1:
-                return visual_identity_match(
-                    visual_uid=visual_uid,
-                    entry=entry,
-                    alias_key=alias_key,
-                    cleaned_alias_key=known_key,
-                    method="VISUAL_REVIEW_ALIAS_ONE_EDIT_OCR",
-                    score=1.0 - 1.0 / len(known_key),
-                )
-
-        return None
-
-    if visual_status != VISUAL_ACCEPTED:
-        return None
-
     candidate_tokens = alias_key.split()
 
-    # 1. Le nom connu est présent intégralement et seuls de petits tokens
-    # parasites ont été ajoutés avant ou après.
     for entry in visual_entries:
         known_tokens = entry["alias_key"].split()
 
@@ -856,69 +760,23 @@ def match_ocr_with_visual_identity(
                     prefix + suffix
                 )
             ):
-                return visual_identity_match(
-                    visual_uid=visual_uid,
-                    entry=entry,
-                    alias_key=alias_key,
-                    cleaned_alias_key=entry["alias_key"],
-                    method="VISUAL_ALIAS_EDGE_NOISE",
-                    score=1.0,
-                )
+                return {
+                    "matched_hero_uid": visual_uid,
+                    "matched_alias": entry["alias"],
+                    "match_method": (
+                        "VISUAL_ALIAS_EDGE_NOISE"
+                    ),
+                    "match_score": 1.0,
+                    "ambiguous": False,
+                    "alias_key": alias_key,
+                    "cleaned_alias_key": (
+                        entry["alias_key"]
+                    ),
+                }
 
-    # 2. Une seule insertion, suppression ou substitution sur l'ensemble
-    # du nom, espaces compris. Les noms de trois caractères exigent un
-    # visuel plus solide afin d'éviter les faux positifs.
-    for entry in visual_entries:
-        known_key = entry["alias_key"]
-
-        if (
-            len(alias_key) != len(known_key)
-            or len(alias_key) < 3
-        ):
-            continue
-
-        if len(known_key) == 3:
-            strong_enough = visual_is_strong_enough(
-                visual_similarity,
-                visual_margin,
-                VISUAL_SHORT_ONE_EDIT_MIN_SIMILARITY,
-                VISUAL_SHORT_ONE_EDIT_MIN_MARGIN,
-            )
-        else:
-            strong_enough = visual_is_strong_enough(
-                visual_similarity,
-                visual_margin,
-                VISUAL_ONE_EDIT_MIN_SIMILARITY,
-                VISUAL_ONE_EDIT_MIN_MARGIN,
-            )
-
-        if not strong_enough:
-            continue
-
-        if edit_distance(
-            alias_key,
-            known_key,
-        ) == 1:
-            return visual_identity_match(
-                visual_uid=visual_uid,
-                entry=entry,
-                alias_key=alias_key,
-                cleaned_alias_key=known_key,
-                method="VISUAL_ALIAS_ONE_EDIT_OCR",
-                score=(
-                    1.0
-                    - 1.0 / len(known_key)
-                ),
-            )
-
-    # 3 et 4. Le recadrage du nom peut supprimer le début ou la fin
-    # d'un nom long. On exige une portion observée suffisamment longue,
-    # au moins 60 % du nom connu, et une identité visuelle solide.
-    if not visual_is_strong_enough(
-        visual_similarity,
-        visual_margin,
-        VISUAL_TRUNCATION_MIN_SIMILARITY,
-        VISUAL_TRUNCATION_MIN_MARGIN,
+    if (
+        visual_similarity < 0.90
+        or visual_margin < 0.02
     ):
         return None
 
@@ -926,85 +784,31 @@ def match_ocr_with_visual_identity(
         known_key = entry["alias_key"]
 
         if (
-            len(alias_key) >= len(known_key)
-            or len(alias_key)
-            < VISUAL_TRUNCATION_MIN_LENGTH
+            " " in alias_key
+            or " " in known_key
+            or len(alias_key) != len(known_key)
+            or len(alias_key) < 4
         ):
             continue
 
-        coverage = (
-            len(alias_key)
-            / len(known_key)
-        )
-
-        if (
-            coverage
-            < VISUAL_TRUNCATION_MIN_COVERAGE
-        ):
-            continue
-
-        known_prefix = known_key[
-            : len(alias_key)
-        ]
-        known_suffix = known_key[
-            -len(alias_key) :
-        ]
-
-        if alias_key == known_prefix:
-            return visual_identity_match(
-                visual_uid=visual_uid,
-                entry=entry,
-                alias_key=alias_key,
-                cleaned_alias_key=known_key,
-                method="VISUAL_ALIAS_TRUNCATED_RIGHT",
-                score=coverage,
-            )
-
-        if alias_key == known_suffix:
-            return visual_identity_match(
-                visual_uid=visual_uid,
-                entry=entry,
-                alias_key=alias_key,
-                cleaned_alias_key=known_key,
-                method="VISUAL_ALIAS_TRUNCATED_LEFT",
-                score=coverage,
-            )
-
-        prefix_distance = edit_distance(
+        if edit_distance(
             alias_key,
-            known_prefix,
-        )
-        suffix_distance = edit_distance(
-            alias_key,
-            known_suffix,
-        )
-
-        if min(
-            prefix_distance,
-            suffix_distance,
+            known_key,
         ) == 1:
-            method = (
-                "VISUAL_ALIAS_TRUNCATED_RIGHT_ONE_EDIT"
-                if prefix_distance
-                <= suffix_distance
-                else "VISUAL_ALIAS_TRUNCATED_LEFT_ONE_EDIT"
-            )
-
-            return visual_identity_match(
-                visual_uid=visual_uid,
-                entry=entry,
-                alias_key=alias_key,
-                cleaned_alias_key=known_key,
-                method=method,
-                score=(
-                    coverage
-                    * (
-                        1.0
-                        - 1.0
-                        / len(alias_key)
-                    )
+            return {
+                "matched_hero_uid": visual_uid,
+                "matched_alias": entry["alias"],
+                "match_method": (
+                    "VISUAL_ALIAS_ONE_EDIT_OCR"
                 ),
-            )
+                "match_score": (
+                    1.0
+                    - 1.0 / len(known_key)
+                ),
+                "ambiguous": False,
+                "alias_key": alias_key,
+                "cleaned_alias_key": known_key,
+            }
 
     return None
 
@@ -1074,7 +878,7 @@ def reconcile_row(
             "ambiguous"
         ]
         and visual_status
-        in {VISUAL_ACCEPTED, "REVIEW"}
+        == VISUAL_ACCEPTED
         and ocr_text
         and ocr_confidence >= OCR_HIGH
     ):
@@ -1082,12 +886,10 @@ def reconcile_row(
             match_ocr_with_visual_identity(
                 ocr_text=ocr_text,
                 visual_uid=visual_uid,
-                visual_status=visual_status,
                 visual_similarity=(
                     visual_similarity
                 ),
                 visual_margin=visual_margin,
-                ocr_confidence=ocr_confidence,
                 entries_by_hero=(
                     entries_by_hero
                 ),
@@ -1653,7 +1455,7 @@ def create_html_report(
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <title>Réconciliation visuelle et OCR V3</title>
+    <title>Réconciliation visuelle et OCR V2</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -1733,10 +1535,10 @@ def create_html_report(
 </head>
 <body>
     <section class="summary">
-        <h1>Réconciliation visuelle et OCR V3</h1>
+        <h1>Réconciliation visuelle et OCR V2</h1>
         <p>
-            Les parasites, erreurs d'un caractère et noms tronqués sont corrigés
-            sans être ajoutés comme alias.
+            Les symboles parasites placés avant ou après un nom connu
+            sont corrigés sans être ajoutés comme alias.
         </p>
         <ul>{summary_items}</ul>
     </section>
@@ -1967,26 +1769,7 @@ def main() -> int:
         1
         for row in result_rows
         if row["ocr_match_method"]
-        in {
-            "VISUAL_ALIAS_ONE_EDIT_OCR",
-            "VISUAL_REVIEW_ALIAS_ONE_EDIT_OCR",
-        }
-    )
-
-    corrected_truncation = sum(
-        1
-        for row in result_rows
-        if str(row["ocr_match_method"]).startswith(
-            "VISUAL_ALIAS_TRUNCATED_"
-        )
-    )
-
-    corrected_truncation_one_edit = sum(
-        1
-        for row in result_rows
-        if str(row["ocr_match_method"]).endswith(
-            "_ONE_EDIT"
-        )
+        == "VISUAL_ALIAS_ONE_EDIT_OCR"
     )
 
     print("Résumé :")
@@ -2017,14 +1800,6 @@ def main() -> int:
     print(
         "- Erreurs OCR à 1 caractère : "
         f"{corrected_one_edit}"
-    )
-    print(
-        "- Noms tronqués corrigés : "
-        f"{corrected_truncation}"
-    )
-    print(
-        "- Dont troncatures avec 1 erreur OCR : "
-        f"{corrected_truncation_one_edit}"
     )
     print(
         "- Identités finales attribuées : "

@@ -57,12 +57,6 @@ NAME_WIDTH_IN_FRAME_WIDTHS = 2.10
 NAME_TOP_IN_FRAME_HEIGHTS = 0.02
 NAME_BOTTOM_IN_FRAME_HEIGHTS = 0.40
 
-# La première zone est volontairement assez large pour accepter les noms longs.
-# On ne conserve ensuite que la partie adjacente à l'avatar et le haut de la
-# bande, afin d'éliminer les valeurs de puissance et les barres de statistiques.
-NAME_ADJACENT_WIDTH_KEEP_RATIO = 0.80
-NAME_TOP_BAND_KEEP_RATIO = 0.68
-
 
 def read_manifest(path: Path) -> list[dict[str, str]]:
     if not path.exists():
@@ -318,32 +312,17 @@ def name_box(
     frame_height = y2 - y1
 
     gap = frame_width * NAME_GAP_IN_FRAME_WIDTHS
-    initial_width = frame_width * NAME_WIDTH_IN_FRAME_WIDTHS
+    name_width = frame_width * NAME_WIDTH_IN_FRAME_WIDTHS
 
-    initial_y1 = y1 + frame_height * NAME_TOP_IN_FRAME_HEIGHTS
-    initial_y2 = y1 + frame_height * NAME_BOTTOM_IN_FRAME_HEIGHTS
-
-    # Le nom se trouve toujours du côté de l'avatar.
-    # Les parasites se trouvent à l'extrémité opposée :
-    # - à droite pour l'équipe de gauche ;
-    # - à gauche pour l'équipe de droite.
-    kept_width = initial_width * NAME_ADJACENT_WIDTH_KEEP_RATIO
+    name_y1 = y1 + frame_height * NAME_TOP_IN_FRAME_HEIGHTS
+    name_y2 = y1 + frame_height * NAME_BOTTOM_IN_FRAME_HEIGHTS
 
     if side == "L":
         name_x1 = x2 + gap
-        name_x2 = name_x1 + kept_width
-    elif side == "R":
-        name_x2 = x1 - gap
-        name_x1 = name_x2 - kept_width
+        name_x2 = name_x1 + name_width
     else:
-        raise ValueError(f"Côté invalide : {side}")
-
-    # La partie basse de l'ancienne découpe contenait principalement
-    # les barres de statistiques. On conserve uniquement le haut.
-    name_y1 = initial_y1
-    name_y2 = initial_y1 + (
-        initial_y2 - initial_y1
-    ) * NAME_TOP_BAND_KEEP_RATIO
+        name_x2 = x1 - gap
+        name_x1 = name_x2 - name_width
 
     return clamp_box(
         (name_x1, name_y1, name_x2, name_y2),

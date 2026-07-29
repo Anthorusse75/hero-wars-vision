@@ -72,19 +72,12 @@ VISUAL_ACCEPTED = "ACCEPTED"
 # Elles ne créent jamais d'alias dans le catalogue.
 VISUAL_ONE_EDIT_MIN_SIMILARITY = 0.90
 VISUAL_ONE_EDIT_MIN_MARGIN = 0.02
-VISUAL_SHORT_ONE_EDIT_MIN_SIMILARITY = 0.91
+VISUAL_SHORT_ONE_EDIT_MIN_SIMILARITY = 0.93
 VISUAL_SHORT_ONE_EDIT_MIN_MARGIN = 0.04
 VISUAL_TRUNCATION_MIN_SIMILARITY = 0.90
 VISUAL_TRUNCATION_MIN_MARGIN = 0.02
 VISUAL_TRUNCATION_MIN_LENGTH = 7
 VISUAL_TRUNCATION_MIN_COVERAGE = 0.60
-
-# Pour un résultat visuel REVIEW, on n'autorise qu'une correction OCR
-# très encadrée : même longueur, une seule édition, OCR très fiable,
-# similarité et marge visuelles minimales.
-VISUAL_REVIEW_ONE_EDIT_MIN_SIMILARITY = 0.88
-VISUAL_REVIEW_ONE_EDIT_MIN_MARGIN = 0.03
-VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE = 0.95
 
 # Alias validés humainement pendant la revue du batch 002.
 # L'option --apply-reviewed-aliases les ajoute au catalogue avec sauvegarde.
@@ -739,10 +732,8 @@ def visual_is_strong_enough(
 def match_ocr_with_visual_identity(
     ocr_text: str,
     visual_uid: str,
-    visual_status: str,
     visual_similarity: float,
     visual_margin: float,
-    ocr_confidence: float,
     entries_by_hero: dict[
         str,
         list[dict[str, str]],
@@ -773,47 +764,6 @@ def match_ocr_with_visual_identity(
     )
 
     if not visual_entries:
-        return None
-
-    # Un statut REVIEW n'est pas assez solide pour autoriser les règles
-    # générales de troncature ou de suppression de parasites. On accepte
-    # uniquement un nom OCR très fiable, de même longueur, à une édition
-    # du héros proposé visuellement.
-    if visual_status == "REVIEW":
-        if (
-            ocr_confidence
-            < VISUAL_REVIEW_ONE_EDIT_MIN_OCR_CONFIDENCE
-            or not visual_is_strong_enough(
-                visual_similarity,
-                visual_margin,
-                VISUAL_REVIEW_ONE_EDIT_MIN_SIMILARITY,
-                VISUAL_REVIEW_ONE_EDIT_MIN_MARGIN,
-            )
-        ):
-            return None
-
-        for entry in visual_entries:
-            known_key = entry["alias_key"]
-
-            if (
-                len(alias_key) != len(known_key)
-                or len(known_key) < 4
-            ):
-                continue
-
-            if edit_distance(alias_key, known_key) == 1:
-                return visual_identity_match(
-                    visual_uid=visual_uid,
-                    entry=entry,
-                    alias_key=alias_key,
-                    cleaned_alias_key=known_key,
-                    method="VISUAL_REVIEW_ALIAS_ONE_EDIT_OCR",
-                    score=1.0 - 1.0 / len(known_key),
-                )
-
-        return None
-
-    if visual_status != VISUAL_ACCEPTED:
         return None
 
     candidate_tokens = alias_key.split()
@@ -1074,7 +1024,7 @@ def reconcile_row(
             "ambiguous"
         ]
         and visual_status
-        in {VISUAL_ACCEPTED, "REVIEW"}
+        == VISUAL_ACCEPTED
         and ocr_text
         and ocr_confidence >= OCR_HIGH
     ):
@@ -1082,12 +1032,10 @@ def reconcile_row(
             match_ocr_with_visual_identity(
                 ocr_text=ocr_text,
                 visual_uid=visual_uid,
-                visual_status=visual_status,
                 visual_similarity=(
                     visual_similarity
                 ),
                 visual_margin=visual_margin,
-                ocr_confidence=ocr_confidence,
                 entries_by_hero=(
                     entries_by_hero
                 ),
@@ -1967,10 +1915,7 @@ def main() -> int:
         1
         for row in result_rows
         if row["ocr_match_method"]
-        in {
-            "VISUAL_ALIAS_ONE_EDIT_OCR",
-            "VISUAL_REVIEW_ALIAS_ONE_EDIT_OCR",
-        }
+        == "VISUAL_ALIAS_ONE_EDIT_OCR"
     )
 
     corrected_truncation = sum(

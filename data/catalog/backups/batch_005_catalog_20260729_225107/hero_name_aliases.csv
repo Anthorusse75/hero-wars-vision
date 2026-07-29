@@ -7,8 +7,6 @@ HW_HERO_0005;Cascade;unknown;easyocr;2;0
 HW_HERO_0006;Céleste;unknown;easyocr;6;0
 HW_HERO_0007;Champi et Gnon;unknown;easyocr;1;0
 HW_HERO_0007;Mushy and Shroom;en;human_reviewed_batch_001;3;1
-HW_HERO_0007;Mushy and Shroor;unknown;ocr_truncation_reviewed;1;1
-HW_HERO_0007;Mushy y Shroom;es;manual_review_batch_005;1;1
 HW_HERO_0008;Corvus;unknown;easyocr;1;0
 HW_HERO_0009;Crow;unknown;easyocr;1;0
 HW_HERO_0010;Dante;unknown;easyocr;4;0
@@ -49,7 +47,6 @@ HW_HERO_0042;Polaris;unknown;easyocr;7;0
 HW_HERO_0043;Qing Mao;unknown;easyocr;2;0
 HW_HERO_0044;Rufus;unknown;easyocr;2;0
 HW_HERO_0045;Satori;unknown;easyocr;4;0
-HW_HERO_0046;Sebastian;en;human_reviewed_batch_002;1;1
 HW_HERO_0046;Sébastien;unknown;easyocr;1;0
 HW_HERO_0047;Soleil;unknown;easyocr;2;0
 HW_HERO_0048;Somna;unknown;easyocr;2;0
@@ -72,25 +69,25 @@ HW_HERO_0063;Alvanor;unknown;human_reviewed_batch_001;3;1
 HW_HERO_0064;Helios;unknown;human_reviewed_batch_001;3;1
 HW_HERO_0065;Peppy;unknown;human_reviewed_batch_001;2;1
 HW_HERO_0066;Faceless;unknown;human_reviewed_batch_001;3;1
-HW_HERO_0066;Sanface;fr;official_hero_wars_fr;2;1
 HW_HERO_0066;Sin rostro;es;human_reviewed_batch_001;1;1
 HW_HERO_0067;Arachné;unknown;human_reviewed_batch_001;2;1
 HW_HERO_0068;Astrid and Lucas;unknown;human_reviewed_batch_001;2;1
 HW_HERO_0068;Astrid et Lucas;fr;human_reviewed_batch_001;2;1
-HW_HERO_0068;Astrid y Lucas;es;manual_review_batch_005;1;1
 HW_HERO_0069;Aurore;unknown;human_reviewed_batch_001;1;1
 HW_HERO_0070;Heidi;unknown;human_reviewed_batch_001;1;1
 HW_HERO_0071;Kaï;unknown;human_reviewed_batch_001;1;1
 HW_HERO_0072;Krista;unknown;human_reviewed_batch_001;1;1
 HW_HERO_0073;Lars;unknown;human_reviewed_batch_001;1;1
 HW_HERO_0074;Théa;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0075;Daredevil;en;manual_review_batch_004;1;1
 HW_HERO_0075;Trompelamort;unknown;human_reviewed_batch_001;1;1
+HW_HERO_0066;Sanface;fr;official_hero_wars_fr;2;1
+HW_HERO_0007;Mushy and Shroor;unknown;ocr_truncation_reviewed;1;1
+HW_HERO_0046;Sebastian;en;human_reviewed_batch_002;1;1
 HW_HERO_0076;Chabba;fr;manual_review_batch_002;1;1
 HW_HERO_0077;Elmir;en;manual_review_batch_003;1;1
-HW_HERO_0078;Marcus;fr;manual_review_batch_004;3;1
 HW_HERO_0078;Markus;en;manual_review_batch_004;1;1
+HW_HERO_0078;Marcus;fr;manual_review_batch_004;3;1
 HW_HERO_0079;Ninja Turtles;en;manual_review_batch_004;1;1
 HW_HERO_0079;Tortues Ninja;fr;manual_review_batch_004;1;1
 HW_HERO_0080;Fox;en;manual_review_batch_004;1;1
-HW_HERO_0081;Dark Star;en;manual_review_batch_005;2;1
+HW_HERO_0075;Daredevil;en;manual_review_batch_004;1;1

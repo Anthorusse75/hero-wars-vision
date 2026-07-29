@@ -29,25 +29,48 @@ BATCH_PATTERN = re.compile(r"^hero_batch_\d{3}$")
 POWER_MIN = 1_000
 POWER_MAX = 500_000
 
+# Règles V4 calibrées rétrospectivement sur 366 décisions humaines
+# provenant des batches 002, 003 et 004.
+V1_STRONG_ATTEMPT_CONFIDENCE = 0.88
+V1_DUAL_OLD_CONFIDENCE = 0.85
+V1_DUAL_ATTEMPT_CONFIDENCE = 0.70
+V1_LOST_PREFIX_ATTEMPT_CONFIDENCE = 0.60
+V1_VERY_HIGH_ORIGINAL_CONFIDENCE = 0.95
+V1_LOW_V2_ORIGINAL_CONFIDENCE = 0.85
+V1_DAMAGE_ORIGINAL_CONFIDENCE = 0.90
+V1_CENTER_ATTEMPT_CONFIDENCE = 0.50
+V1_THREE_VOTES_WIDE_CONFIDENCE = 0.75
+V1_THREE_VOTES_ORIGINAL_CONFIDENCE = 0.88
+
+V2_TRAILING_NOISE_CONFIDENCE = 0.75
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Arbitre prudemment les résultats OCR V1/V2 des statistiques "
-            "sans relancer EasyOCR."
+            "avec les règles calibrées V4, sans relancer EasyOCR."
         )
     )
 
     parser.add_argument(
         "--batch",
-        required=True,
-        help="Nom du lot, par exemple hero_batch_002.",
+        help="Nom du lot, par exemple hero_batch_005.",
     )
 
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Remplace un résultat V3 déjà existant.",
+        help="Remplace un résultat existant.",
+    )
+
+    parser.add_argument(
+        "--evaluate-history",
+        action="store_true",
+        help=(
+            "Teste rétrospectivement les règles V4 sur toutes les "
+            "décisions statistiques manuelles disponibles."
+        ),
     )
 
     return parser.parse_args()
@@ -183,29 +206,75 @@ def candidate_max_confidence(
     )
 
 
-def arbitrate_row(
+def safe_float(
+    value: Any,
+) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def attempt_value_and_confidence(
     row: dict[str, str],
-) -> tuple[str, str, int]:
-    slot_status = str(row.get("slot_status") or "")
+    variant: str,
+) -> tuple[str, float]:
+    raw = str(row.get("candidate_attempts") or "").strip()
+
+    if not raw:
+        return "", 0.0
+
+    try:
+        attempts = json.loads(raw)
+    except json.JSONDecodeError:
+        return "", 0.0
+
+    for attempt in attempts:
+        if str(attempt.get("variant") or "") != variant:
+            continue
+
+        return (
+            canonical_digits(
+                str(attempt.get("digits") or "")
+            ),
+            safe_float(attempt.get("confidence")),
+        )
+
+    return "", 0.0
+
+
+def calibrated_review_decision(
+    row: dict[str, str],
+    old_value: str,
+    new_value: str,
+    old_votes: int,
+    new_votes: int,
+    old_max_confidence: float,
+    new_max_confidence: float,
+) -> tuple[str, str, str] | None:
+    """
+    Applique uniquement des règles ayant obtenu 100 % de précision
+    rétrospective sur les 366 décisions humaines des batches 002–004.
+
+    Le troisième élément retourné est le nom précis de la règle.
+    """
+
     metric = str(row.get("metric") or "")
+    status = str(row.get("status") or "").strip().upper()
+    selected_variant = str(
+        row.get("selected_variant") or ""
+    ).strip()
 
-    if slot_status == "EMPTY":
-        return "", "EMPTY_SLOT", 0
-
-    old_value = canonical_digits(
-        str(row.get("old_value") or "")
-    )
-    new_value = canonical_digits(
-        str(row.get("value") or "")
+    old_confidence = safe_float(
+        row.get("old_confidence")
     )
 
-    if old_value == new_value and old_value:
-        return old_value, "UNCHANGED_V1_V2", 0
-
-    groups = parse_attempts(row)
-
-    old_votes = candidate_votes(groups, old_value)
-    new_votes = candidate_votes(groups, new_value)
+    wide_value, wide_confidence = (
+        attempt_value_and_confidence(
+            row,
+            "dual_08_06",
+        )
+    )
 
     old_plausible = plausible_candidate(
         metric,
@@ -216,25 +285,178 @@ def arbitrate_row(
         new_value,
     )
 
-    # Cas le plus sûr : la V1 produit une puissance impossible,
-    # alors que la V2 revient dans la plage observée.
+    if old_plausible:
+        if (
+            old_max_confidence
+            >= V1_STRONG_ATTEMPT_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_STRONG_ATTEMPT",
+            )
+
+        if (
+            old_confidence
+            >= V1_DUAL_OLD_CONFIDENCE
+            and old_max_confidence
+            >= V1_DUAL_ATTEMPT_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_DUAL_CONFIDENCE",
+            )
+
+        if (
+            new_value
+            and old_value != new_value
+            and old_value.endswith(new_value)
+            and old_max_confidence
+            >= V1_LOST_PREFIX_ATTEMPT_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_V2_LOST_LEADING_DIGITS",
+            )
+
+        if (
+            status == "HIGH"
+            and old_confidence
+            >= V1_VERY_HIGH_ORIGINAL_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_ORIGINAL_VERY_HIGH",
+            )
+
+        if (
+            status == "LOW"
+            and old_confidence
+            >= V1_LOW_V2_ORIGINAL_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_V2_LOW_CONFIDENCE",
+            )
+
+        if (
+            metric == "damage_dealt"
+            and old_confidence
+            >= V1_DAMAGE_ORIGINAL_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_DAMAGE_ORIGINAL_HIGH",
+            )
+
+        if (
+            selected_variant == "dual_16_09"
+            and old_max_confidence
+            >= V1_CENTER_ATTEMPT_CONFIDENCE
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_CENTER_VARIANT_SUPPORTED",
+            )
+
+        if (
+            new_votes == 3
+            and (
+                (
+                    wide_value == old_value
+                    and wide_confidence
+                    >= V1_THREE_VOTES_WIDE_CONFIDENCE
+                )
+                or old_confidence
+                >= V1_THREE_VOTES_ORIGINAL_CONFIDENCE
+            )
+        ):
+            return (
+                old_value,
+                "CALIBRATED_RETAIN_V1",
+                "V1_THREE_V2_VOTES_OVERRIDDEN",
+            )
+
+    if (
+        new_plausible
+        and old_votes == 0
+        and old_value
+        and new_value
+        and old_value != new_value
+        and old_value.startswith(new_value)
+        and new_max_confidence
+        >= V2_TRAILING_NOISE_CONFIDENCE
+    ):
+        return (
+            new_value,
+            "CALIBRATED_ACCEPT_V2",
+            "V2_V1_TRAILING_NOISE",
+        )
+
+    return None
+
+
+def arbitrate_row(
+    row: dict[str, str],
+) -> tuple[str, str, int, str]:
+    slot_status = str(row.get("slot_status") or "")
+    metric = str(row.get("metric") or "")
+
+    if slot_status == "EMPTY":
+        return "", "EMPTY_SLOT", 0, ""
+
+    old_value = canonical_digits(
+        str(row.get("old_value") or "")
+    )
+    new_value = canonical_digits(
+        str(row.get("value") or "")
+    )
+
+    if old_value == new_value and old_value:
+        return old_value, "UNCHANGED_V1_V2", 0, ""
+
+    groups = parse_attempts(row)
+
+    old_votes = candidate_votes(groups, old_value)
+    new_votes = candidate_votes(groups, new_value)
+
+    old_max_confidence = candidate_max_confidence(
+        groups,
+        old_value,
+    )
+    new_max_confidence = candidate_max_confidence(
+        groups,
+        new_value,
+    )
+
+    old_plausible = plausible_candidate(
+        metric,
+        old_value,
+    )
+    new_plausible = plausible_candidate(
+        metric,
+        new_value,
+    )
+
     if (
         metric == "power"
         and not old_plausible
         and new_plausible
     ):
-        return new_value, "POWER_RANGE_FIX", 0
+        return new_value, "POWER_RANGE_FIX", 0, ""
 
     if old_plausible and not new_plausible:
-        return old_value, "RETAIN_V1_V2_INVALID", 0
+        return old_value, "RETAIN_V1_V2_INVALID", 0, ""
 
-    # Deux variantes spatiales ou plus relisent exactement la V1.
     if old_plausible and old_votes >= 2:
-        return old_value, "RETAIN_V1_CONSENSUS", 0
+        return old_value, "RETAIN_V1_CONSENSUS", 0, ""
 
-    # Deux variantes ou plus relisent la V2 et aucune ne relit la V1.
-    # Pour les substitutions de même longueur, on garde une revue humaine :
-    # 0/9, 1/7 et 3/8 restent fréquents.
     if (
         new_plausible
         and new_votes >= 2
@@ -244,14 +466,43 @@ def arbitrate_row(
             old_plausible
             and len(old_value) == len(new_value)
         ):
-            return "", "REVIEW_SAME_LENGTH_SUBSTITUTION", 1
+            base_reason = (
+                "REVIEW_SAME_LENGTH_SUBSTITUTION"
+            )
+        else:
+            return (
+                new_value,
+                "ACCEPT_V2_CONSENSUS",
+                0,
+                "",
+            )
+    else:
+        base_reason = (
+            "REVIEW_INSUFFICIENT_CONSENSUS"
+        )
 
-        return new_value, "ACCEPT_V2_CONSENSUS", 0
+    calibrated = calibrated_review_decision(
+        row=row,
+        old_value=old_value,
+        new_value=new_value,
+        old_votes=old_votes,
+        new_votes=new_votes,
+        old_max_confidence=old_max_confidence,
+        new_max_confidence=new_max_confidence,
+    )
 
-    # Une valeur V1 plausible reste prioritaire lorsqu'aucun consensus
-    # suffisamment fort ne justifie son remplacement.
-    return "", "REVIEW_INSUFFICIENT_CONSENSUS", 1
+    if calibrated is not None:
+        final_value, reason, calibration_rule = (
+            calibrated
+        )
+        return (
+            final_value,
+            reason,
+            0,
+            calibration_rule,
+        )
 
+    return "", base_reason, 1, ""
 
 def build_consolidated_rows(
     rows: list[dict[str, Any]],
@@ -352,7 +603,7 @@ def write_review_html(
         '<html lang="fr">',
         "<head>",
         '<meta charset="utf-8">',
-        "<title>Revue OCR statistiques V3</title>",
+        "<title>Revue OCR statistiques V4</title>",
         """
         <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
@@ -366,7 +617,7 @@ def write_review_html(
         """,
         "</head>",
         "<body>",
-        "<h1>Revue OCR statistiques V3</h1>",
+        "<h1>Revue OCR statistiques V4</h1>",
         f"<p>Cas restant à contrôler : {len(rows)}</p>",
         "<table>",
         (
@@ -461,12 +712,299 @@ def copy_review_assets(
             )
 
 
+def manual_truth_label(
+    row: dict[str, str],
+    validated_value: str,
+) -> str:
+    truth = canonical_digits(validated_value)
+    old_value = canonical_digits(
+        str(row.get("old_value") or "")
+    )
+    new_value = canonical_digits(
+        str(row.get("value") or "")
+    )
+
+    if truth == old_value:
+        return "V1"
+
+    if truth == new_value:
+        return "V2"
+
+    return "NEITHER"
+
+
+def evaluate_history() -> int:
+    batch_root = Path("data/batches")
+    evaluation_rows: list[dict[str, Any]] = []
+
+    for batch_dir in sorted(
+        batch_root.glob("hero_batch_*")
+    ):
+        detailed_path = (
+            batch_dir
+            / "reports"
+            / "stat_ocr_v3"
+            / "stat_values_arbitrated.csv"
+        )
+        manual_path = (
+            batch_dir
+            / "validated"
+            / "manual_stat_decisions.csv"
+        )
+
+        if not detailed_path.exists() or not manual_path.exists():
+            continue
+
+        _, detailed_rows = read_csv(detailed_path)
+        _, manual_rows = read_csv(manual_path)
+
+        detailed_by_key = {
+            (
+                str(row.get("screenshot_id") or ""),
+                str(row.get("side") or ""),
+                str(row.get("slot") or ""),
+                str(row.get("metric") or ""),
+            ): row
+            for row in detailed_rows
+        }
+
+        for manual_row in manual_rows:
+            key = (
+                str(manual_row.get("screenshot_id") or ""),
+                str(manual_row.get("side") or ""),
+                str(manual_row.get("slot") or ""),
+                str(manual_row.get("metric") or ""),
+            )
+
+            source_row = detailed_by_key.get(key)
+
+            if source_row is None:
+                raise RuntimeError(
+                    "Décision manuelle sans ligne d'arbitrage : "
+                    f"{batch_dir.name} {' '.join(key)}"
+                )
+
+            (
+                predicted_value,
+                reason,
+                review_required,
+                calibration_rule,
+            ) = arbitrate_row(source_row)
+
+            truth = canonical_digits(
+                str(
+                    manual_row.get(
+                        "validated_value",
+                        "",
+                    )
+                )
+            )
+            truth_label = manual_truth_label(
+                source_row,
+                truth,
+            )
+
+            calibrated = (
+                review_required == 0
+                and reason.startswith("CALIBRATED_")
+            )
+
+            evaluation_rows.append(
+                {
+                    "batch": batch_dir.name,
+                    "screenshot_id": key[0],
+                    "side": key[1],
+                    "slot": key[2],
+                    "metric": key[3],
+                    "v1_value": canonical_digits(
+                        str(source_row.get("old_value") or "")
+                    ),
+                    "v2_value": canonical_digits(
+                        str(source_row.get("value") or "")
+                    ),
+                    "validated_value": truth,
+                    "truth_label": truth_label,
+                    "calibrated": int(calibrated),
+                    "predicted_value": (
+                        predicted_value
+                        if calibrated
+                        else ""
+                    ),
+                    "predicted_label": (
+                        "V1"
+                        if calibrated
+                        and predicted_value
+                        == canonical_digits(
+                            str(
+                                source_row.get(
+                                    "old_value",
+                                    "",
+                                )
+                            )
+                        )
+                        else (
+                            "V2"
+                            if calibrated
+                            else ""
+                        )
+                    ),
+                    "calibration_rule": calibration_rule,
+                    "correct": int(
+                        calibrated
+                        and predicted_value == truth
+                    ),
+                }
+            )
+
+    if not evaluation_rows:
+        raise RuntimeError(
+            "Aucune décision manuelle statistique disponible."
+        )
+
+    output_csv = Path(
+        "arbitration_v4_backtest.csv"
+    )
+    output_txt = Path(
+        "arbitration_v4_backtest.txt"
+    )
+
+    fields = list(evaluation_rows[0].keys())
+    write_csv(
+        output_csv,
+        evaluation_rows,
+        fields,
+    )
+
+    total = len(evaluation_rows)
+    calibrated_rows = [
+        row
+        for row in evaluation_rows
+        if row["calibrated"] == 1
+    ]
+    correct = sum(
+        int(row["correct"])
+        for row in calibrated_rows
+    )
+    errors = len(calibrated_rows) - correct
+
+    truth_counts = Counter(
+        str(row["truth_label"])
+        for row in evaluation_rows
+    )
+    prediction_counts = Counter(
+        str(row["predicted_label"])
+        for row in calibrated_rows
+    )
+    rule_counts = Counter(
+        str(row["calibration_rule"])
+        for row in calibrated_rows
+    )
+
+    lines = [
+        "ÉVALUATION RÉTROSPECTIVE — ARBITRAGE V4",
+        "=" * 72,
+        "",
+        f"Décisions humaines analysées : {total}",
+        f"- V1 correcte : {truth_counts['V1']}",
+        f"- V2 correcte : {truth_counts['V2']}",
+        f"- Ni V1 ni V2 correcte : {truth_counts['NEITHER']}",
+        "",
+        f"Cas résolus automatiquement par V4 : {len(calibrated_rows)}",
+        f"- Choix V1 : {prediction_counts['V1']}",
+        f"- Choix V2 : {prediction_counts['V2']}",
+        f"Décisions rétrospectivement correctes : {correct}",
+        f"Erreurs rétrospectives : {errors}",
+        (
+            "Précision rétrospective : "
+            f"{100.0 * correct / max(len(calibrated_rows), 1):.2f} %"
+        ),
+        (
+            "Réduction des revues historiques : "
+            f"{100.0 * len(calibrated_rows) / total:.2f} %"
+        ),
+        "",
+        "Par lot :",
+    ]
+
+    batches = sorted(
+        {
+            str(row["batch"])
+            for row in evaluation_rows
+        }
+    )
+
+    for batch in batches:
+        batch_rows = [
+            row
+            for row in evaluation_rows
+            if row["batch"] == batch
+        ]
+        batch_calibrated = [
+            row
+            for row in batch_rows
+            if row["calibrated"] == 1
+        ]
+        batch_correct = sum(
+            int(row["correct"])
+            for row in batch_calibrated
+        )
+
+        lines.append(
+            f"- {batch}: "
+            f"{len(batch_calibrated)}/{len(batch_rows)} résolus, "
+            f"{batch_correct} corrects"
+        )
+
+    lines.extend(
+        [
+            "",
+            "Règles déclenchées :",
+        ]
+    )
+
+    for rule, count in rule_counts.most_common():
+        lines.append(
+            f"- {rule}: {count}"
+        )
+
+    lines.extend(
+        [
+            "",
+            f"CSV détaillé : {output_csv}",
+            "",
+            (
+                "Important : cette mesure est rétrospective. "
+                "Elle ne garantit pas une précision identique "
+                "sur de nouvelles captures."
+            ),
+            "",
+        ]
+    )
+
+    summary = "\n".join(lines)
+    output_txt.write_text(
+        summary,
+        encoding="utf-8",
+    )
+    print(summary)
+
+    return 0
+
+
+
 def main() -> int:
     args = parse_args()
 
-    if not BATCH_PATTERN.fullmatch(args.batch):
+    if args.evaluate_history:
+        try:
+            return evaluate_history()
+        except (RuntimeError, csv.Error, OSError, ValueError) as error:
+            print(f"Erreur : {error}", file=sys.stderr)
+            return 1
+
+    if not args.batch or not BATCH_PATTERN.fullmatch(args.batch):
         print(
-            "--batch doit avoir la forme hero_batch_002.",
+            "--batch doit avoir la forme hero_batch_005.",
             file=sys.stderr,
         )
         return 2
@@ -532,7 +1070,12 @@ def main() -> int:
     reason_counts: Counter[str] = Counter()
 
     for row in source_rows:
-        final_value, reason, review_required = arbitrate_row(row)
+        (
+            final_value,
+            reason,
+            review_required,
+            calibration_rule,
+        ) = arbitrate_row(row)
         groups = parse_attempts(row)
 
         old_value = canonical_digits(
@@ -546,6 +1089,7 @@ def main() -> int:
         output_row["final_value"] = final_value
         output_row["arbitration_reason"] = reason
         output_row["review_required"] = str(review_required)
+        output_row["calibration_rule"] = calibration_rule
         output_row["v1_votes"] = str(
             candidate_votes(groups, old_value)
         )
@@ -610,7 +1154,7 @@ def main() -> int:
     )
 
     summary_lines = [
-        "ARBITRAGE OCR STATISTIQUES V3",
+        "ARBITRAGE OCR STATISTIQUES V4",
         "=" * 72,
         "",
         f"Valeurs analysées : {len(output_rows)}",

@@ -6,7 +6,6 @@ HW_HERO_0004;Byrna;unknown;easyocr;8;0
 HW_HERO_0005;Cascade;unknown;easyocr;2;0
 HW_HERO_0006;Céleste;unknown;easyocr;6;0
 HW_HERO_0007;Champi et Gnon;unknown;easyocr;1;0
-HW_HERO_0007;Mushy and Shroom;en;human_reviewed_batch_001;3;1
 HW_HERO_0008;Corvus;unknown;easyocr;1;0
 HW_HERO_0009;Crow;unknown;easyocr;1;0
 HW_HERO_0010;Dante;unknown;easyocr;4;0
@@ -15,15 +14,13 @@ HW_HERO_0012;Electra von Grave;unknown;easyocr;8;0
 HW_HERO_0013;Fafnir;unknown;easyocr;3;0
 HW_HERO_0014;Folio;unknown;easyocr;9;0
 HW_HERO_0015;Galaad;unknown;easyocr;5;0
-HW_HERO_0015;Galahad;en;human_reviewed_batch_001;1;1
 HW_HERO_0016;Ginger;unknown;easyocr;1;0
 HW_HERO_0017;Guus;unknown;easyocr;9;0
 HW_HERO_0018;Iris;unknown;easyocr;9;0
 HW_HERO_0019;Ishmaël;unknown;easyocr;3;0
 HW_HERO_0020;Jet;unknown;easyocr;1;0
-HW_HERO_0021;Jhu;unknown;human_reviewed_batch_001;3;1
+HW_HERO_0021;Jhu;unknown;easyocr;3;0
 HW_HERO_0022;Jorgen;unknown;easyocr;2;0
-HW_HERO_0023;Judge;en;human_reviewed_batch_001;8;1
 HW_HERO_0023;Juge;unknown;easyocr;1;0
 HW_HERO_0024;Julius;unknown;easyocr;6;0
 HW_HERO_0025;K'arkh;unknown;easyocr;1;0
@@ -32,7 +29,7 @@ HW_HERO_0027;Keira;unknown;easyocr;5;0
 HW_HERO_0028;Kendle;unknown;easyocr;1;0
 HW_HERO_0029;Leonel;unknown;easyocr;2;0
 HW_HERO_0030;Lian;unknown;easyocr;7;0
-HW_HERO_0031;Lilith;unknown;human_reviewed_batch_001;2;1
+HW_HERO_0031;Lilith;unknown;easyocr;1;0
 HW_HERO_0032;Martha;unknown;easyocr;7;0
 HW_HERO_0033;Maya;unknown;easyocr;2;0
 HW_HERO_0034;Miu;unknown;easyocr;1;0
@@ -42,7 +39,7 @@ HW_HERO_0037;Octavia;unknown;easyocr;7;0
 HW_HERO_0038;Orion;unknown;easyocr;2;0
 HW_HERO_0039;Oya;unknown;easyocr;2;0
 HW_HERO_0040;Peech;unknown;easyocr;2;0
-HW_HERO_0041;Phobos;unknown;human_reviewed_batch_001;7;1
+HW_HERO_0041;Phobos;unknown;easyocr;1;0
 HW_HERO_0042;Polaris;unknown;easyocr;7;0
 HW_HERO_0043;Qing Mao;unknown;easyocr;2;0
 HW_HERO_0044;Rufus;unknown;easyocr;2;0
@@ -55,28 +52,3 @@ HW_HERO_0050;Tristan;unknown;easyocr;2;0
 HW_HERO_0051;Xe'Sha;unknown;easyocr;4;0
 HW_HERO_0052;Yasmine;unknown;easyocr;4;0
 HW_HERO_0053;Ziri;unknown;easyocr;1;0
-HW_HERO_0054;Amira;unknown;human_reviewed_batch_001;9;1
-HW_HERO_0055;Morrigan;unknown;human_reviewed_batch_001;9;1
-HW_HERO_0056;Isaac;unknown;human_reviewed_batch_001;15;1
-HW_HERO_0057;Drayne;unknown;human_reviewed_batch_001;7;1
-HW_HERO_0058;Cornélius;unknown;human_reviewed_batch_001;4;1
-HW_HERO_0059;Artemis;unknown;human_reviewed_batch_001;4;1
-HW_HERO_0060;Cleaver;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0060;Coupe-chou;fr;human_reviewed_batch_001;3;1
-HW_HERO_0061;Lara Croft;unknown;human_reviewed_batch_001;4;1
-HW_HERO_0062;Luther;unknown;human_reviewed_batch_001;4;1
-HW_HERO_0063;Alvanor;unknown;human_reviewed_batch_001;3;1
-HW_HERO_0064;Helios;unknown;human_reviewed_batch_001;3;1
-HW_HERO_0065;Peppy;unknown;human_reviewed_batch_001;2;1
-HW_HERO_0066;Faceless;unknown;human_reviewed_batch_001;3;1
-HW_HERO_0066;Sin rostro;es;human_reviewed_batch_001;1;1
-HW_HERO_0067;Arachné;unknown;human_reviewed_batch_001;2;1
-HW_HERO_0068;Astrid and Lucas;unknown;human_reviewed_batch_001;2;1
-HW_HERO_0068;Astrid et Lucas;fr;human_reviewed_batch_001;2;1
-HW_HERO_0069;Aurore;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0070;Heidi;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0071;Kaï;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0072;Krista;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0073;Lars;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0074;Théa;unknown;human_reviewed_batch_001;1;1
-HW_HERO_0075;Trompelamort;unknown;human_reviewed_batch_001;1;1

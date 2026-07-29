@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import random
@@ -17,19 +18,100 @@ from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
 
 
-BATCH_NAME = "hero_batch_001"
-BATCH_SIZE = 100
-TIME_BUCKETS = 10
-RANDOM_SEED = 20260728
+DEFAULT_BATCH_SIZE = 100
+DEFAULT_TIME_BUCKETS = 10
+DEFAULT_RANDOM_SEED = 20260729
 
-OUTPUT_ROOT = Path("data/batches") / BATCH_NAME
-RAW_DIRECTORY = OUTPUT_ROOT / "raw"
-MANIFEST_PATH = OUTPUT_ROOT / "batch_manifest.csv"
+BATCHES_ROOT = Path("data/batches")
 
 EXISTING_SAMPLE_DIRECTORIES = (
     Path("data/sample"),
     Path("data/samples"),
+    Path("data/archive/legacy_samples/data_sample"),
 )
+
+SUPPORTED_BATCH_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Exporte depuis MySQL un lot diversifié de captures Hero Wars, "
+            "en excluant toutes les captures déjà utilisées."
+        )
+    )
+
+    parser.add_argument(
+        "--batch",
+        help=(
+            "Nom du lot à créer, par exemple hero_batch_002. "
+            "Sans cette option, le prochain numéro disponible est choisi."
+        ),
+    )
+
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Nombre de captures à exporter (défaut : {DEFAULT_BATCH_SIZE}).",
+    )
+
+    parser.add_argument(
+        "--time-buckets",
+        type=int,
+        default=DEFAULT_TIME_BUCKETS,
+        help=(
+            "Nombre de tranches chronologiques utilisées pour diversifier "
+            f"la sélection (défaut : {DEFAULT_TIME_BUCKETS})."
+        ),
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_RANDOM_SEED,
+        help=(
+            "Graine aléatoire pour rendre la sélection reproductible "
+            f"(défaut : {DEFAULT_RANDOM_SEED})."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if args.count <= 0:
+        raise ValueError("--count doit être strictement supérieur à zéro.")
+
+    if args.time_buckets <= 0:
+        raise ValueError(
+            "--time-buckets doit être strictement supérieur à zéro."
+        )
+
+    if args.batch and not SUPPORTED_BATCH_NAME.fullmatch(args.batch):
+        raise ValueError(
+            "--batch ne peut contenir que des lettres, chiffres, tirets "
+            "et underscores."
+        )
+
+
+def next_batch_name() -> str:
+    highest_number = 0
+
+    if BATCHES_ROOT.exists():
+        for path in BATCHES_ROOT.iterdir():
+            if not path.is_dir():
+                continue
+
+            match = re.fullmatch(r"hero_batch_(\d+)", path.name)
+
+            if match:
+                highest_number = max(
+                    highest_number,
+                    int(match.group(1)),
+                )
+
+    return f"hero_batch_{highest_number + 1:03d}"
 
 
 def required_env(name: str) -> str:
@@ -58,28 +140,116 @@ def create_connection() -> Connection:
     )
 
 
-def existing_screenshot_ids() -> set[int]:
+def add_id_from_filename(
+    filename: str,
+    identifiers: set[int],
+) -> None:
+    match = re.match(r"^(\d+)", filename)
+
+    if match:
+        identifiers.add(int(match.group(1)))
+
+
+def existing_usage() -> tuple[
+    set[int],
+    set[str],
+    Counter[str],
+]:
     """
-    Détecte les captures déjà exportées dans data/sample
-    ou data/samples grâce à l'identifiant placé au début du nom.
+    Recense toutes les captures déjà utilisées dans :
+    - data/sample et data/samples ;
+    - l'ancien échantillon archivé ;
+    - tous les manifests de data/batches ;
+    - tous les fichiers bruts de data/batches.
+
+    Les identifiants et les screen_hash sont exclus pour éviter qu'une
+    même image soit sélectionnée sous un autre identifiant.
     """
 
     identifiers: set[int] = set()
+    screen_hashes: set[str] = set()
+    sources: Counter[str] = Counter()
 
     for directory in EXISTING_SAMPLE_DIRECTORIES:
         if not directory.exists():
             continue
 
+        before = len(identifiers)
+
         for path in directory.rglob("*"):
-            if not path.is_file():
-                continue
+            if path.is_file():
+                add_id_from_filename(
+                    path.name,
+                    identifiers,
+                )
 
-            match = re.match(r"^(\d+)", path.name)
+        sources[directory.as_posix()] += (
+            len(identifiers) - before
+        )
 
-            if match:
-                identifiers.add(int(match.group(1)))
+    if not BATCHES_ROOT.exists():
+        return identifiers, screen_hashes, sources
 
-    return identifiers
+    for batch_directory in sorted(BATCHES_ROOT.iterdir()):
+        if not batch_directory.is_dir():
+            continue
+
+        manifest_path = batch_directory / "batch_manifest.csv"
+
+        if manifest_path.exists():
+            manifest_ids_before = len(identifiers)
+            manifest_hashes_before = len(screen_hashes)
+
+            with manifest_path.open(
+                "r",
+                encoding="utf-8-sig",
+                newline="",
+            ) as csv_file:
+                reader = csv.DictReader(
+                    csv_file,
+                    delimiter=";",
+                )
+
+                for row in reader:
+                    screenshot_id = str(
+                        row.get("screenshot_id") or ""
+                    ).strip()
+
+                    if screenshot_id.isdigit():
+                        identifiers.add(int(screenshot_id))
+
+                    screen_hash = str(
+                        row.get("screen_hash") or ""
+                    ).strip()
+
+                    if screen_hash:
+                        screen_hashes.add(screen_hash)
+
+            sources[
+                f"{batch_directory.name}/manifest_ids"
+            ] += len(identifiers) - manifest_ids_before
+
+            sources[
+                f"{batch_directory.name}/manifest_hashes"
+            ] += len(screen_hashes) - manifest_hashes_before
+
+        raw_directory = batch_directory / "raw"
+
+        if raw_directory.exists():
+            raw_ids_before = len(identifiers)
+
+            for path in raw_directory.rglob("*"):
+                if path.is_file():
+                    add_id_from_filename(
+                        path.name,
+                        identifiers,
+                    )
+
+            sources[
+                f"{batch_directory.name}/raw"
+            ] += len(identifiers) - raw_ids_before
+
+    return identifiers, screen_hashes, sources
 
 
 def user_key(row: dict[str, Any]) -> str:
@@ -99,6 +269,8 @@ def user_key(row: dict[str, Any]) -> str:
 def select_diverse_rows(
     rows: list[dict[str, Any]],
     target_size: int,
+    time_buckets: int,
+    random_seed: int,
 ) -> list[dict[str, Any]]:
     """
     Divise l'historique en tranches chronologiques, puis sélectionne
@@ -108,26 +280,31 @@ def select_diverse_rows(
     if len(rows) <= target_size:
         return rows.copy()
 
-    rng = random.Random(RANDOM_SEED)
+    rng = random.Random(random_seed)
 
     selected: list[dict[str, Any]] = []
     selected_ids: set[int] = set()
 
     total_rows = len(rows)
+    effective_buckets = min(
+        time_buckets,
+        target_size,
+        total_rows,
+    )
 
-    for bucket_index in range(TIME_BUCKETS):
+    for bucket_index in range(effective_buckets):
         start = round(
-            bucket_index * total_rows / TIME_BUCKETS
+            bucket_index * total_rows / effective_buckets
         )
         end = round(
-            (bucket_index + 1) * total_rows / TIME_BUCKETS
+            (bucket_index + 1) * total_rows / effective_buckets
         )
 
         bucket = rows[start:end]
 
-        quota = target_size // TIME_BUCKETS
+        quota = target_size // effective_buckets
 
-        if bucket_index < target_size % TIME_BUCKETS:
+        if bucket_index < target_size % effective_buckets:
             quota += 1
 
         rows_by_user: dict[str, list[dict[str, Any]]] = (
@@ -228,6 +405,7 @@ def sanitize_filename(filename: str) -> str:
 def fetch_metadata(
     connection: Connection,
     excluded_ids: set[int],
+    excluded_hashes: set[str],
 ) -> list[dict[str, Any]]:
     with connection.cursor() as cursor:
         cursor.execute(
@@ -250,11 +428,22 @@ def fetch_metadata(
 
         rows = list(cursor.fetchall())
 
-    return [
-        row
-        for row in rows
-        if int(row["id"]) not in excluded_ids
-    ]
+    filtered_rows: list[dict[str, Any]] = []
+
+    for row in rows:
+        screenshot_id = int(row["id"])
+
+        if screenshot_id in excluded_ids:
+            continue
+
+        screen_hash = str(row.get("screen_hash") or "").strip()
+
+        if screen_hash and screen_hash in excluded_hashes:
+            continue
+
+        filtered_rows.append(row)
+
+    return filtered_rows
 
 
 def fetch_images(
@@ -291,12 +480,60 @@ def fetch_images(
     return rows_by_id
 
 
+def write_manifest(
+    manifest_path: Path,
+    rows: list[dict[str, Any]],
+) -> None:
+    fieldnames = [
+        "screenshot_id",
+        "filename",
+        "original_filename",
+        "date",
+        "user_id",
+        "username",
+        "guild_id",
+        "message_id",
+        "screen_hash",
+        "width",
+        "height",
+        "format",
+        "file_size_bytes",
+    ]
+
+    with manifest_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            delimiter=";",
+            fieldnames=fieldnames,
+        )
+
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> int:
+    args = parse_args()
+
+    try:
+        validate_args(args)
+    except ValueError as error:
+        print(f"Erreur : {error}", file=sys.stderr)
+        return 2
+
     load_dotenv()
 
-    if MANIFEST_PATH.exists():
+    batch_name = args.batch or next_batch_name()
+    output_root = BATCHES_ROOT / batch_name
+    raw_directory = output_root / "raw"
+    manifest_path = output_root / "batch_manifest.csv"
+
+    if output_root.exists():
         print(
-            f"Le lot existe déjà : {OUTPUT_ROOT}",
+            f"Le lot existe déjà : {output_root}",
             file=sys.stderr,
         )
         print(
@@ -308,28 +545,59 @@ def main() -> int:
     connection: Connection | None = None
 
     try:
-        excluded_ids = existing_screenshot_ids()
+        (
+            excluded_ids,
+            excluded_hashes,
+            exclusion_sources,
+        ) = existing_usage()
 
+        print(f"Lot à créer : {batch_name}")
+        print(f"Taille demandée : {args.count}")
+        print(f"Graine : {args.seed}")
+        print()
         print(
-            f"Captures déjà utilisées et exclues : "
+            f"Identifiants déjà utilisés et exclus : "
             f"{len(excluded_ids)}"
         )
+        print(
+            f"Hashes déjà utilisés et exclus : "
+            f"{len(excluded_hashes)}"
+        )
+
+        if exclusion_sources:
+            print("Sources d'exclusion :")
+
+            for source, count in exclusion_sources.most_common():
+                print(f"- {source}: {count}")
+
+        print()
 
         connection = create_connection()
 
         metadata_rows = fetch_metadata(
             connection=connection,
             excluded_ids=excluded_ids,
+            excluded_hashes=excluded_hashes,
         )
 
         print(
-            f"Captures de héros disponibles : "
+            f"Captures de héros disponibles après exclusions : "
             f"{len(metadata_rows)}"
         )
 
+        if len(metadata_rows) < args.count:
+            print(
+                "Nombre insuffisant de captures disponibles : "
+                f"{len(metadata_rows)} pour {args.count} demandées.",
+                file=sys.stderr,
+            )
+            return 1
+
         selected_rows = select_diverse_rows(
             rows=metadata_rows,
-            target_size=BATCH_SIZE,
+            target_size=args.count,
+            time_buckets=args.time_buckets,
+            random_seed=args.seed,
         )
 
         selected_ids = [
@@ -348,9 +616,9 @@ def main() -> int:
             selected_ids=selected_ids,
         )
 
-        RAW_DIRECTORY.mkdir(
+        raw_directory.mkdir(
             parents=True,
-            exist_ok=True,
+            exist_ok=False,
         )
 
         manifest_rows: list[dict[str, Any]] = []
@@ -418,7 +686,7 @@ def main() -> int:
                 f"{extension}"
             )
 
-            output_path = RAW_DIRECTORY / output_name
+            output_path = raw_directory / output_name
             output_path.write_bytes(image_bytes)
 
             resolution = f"{width}x{height}"
@@ -457,38 +725,15 @@ def main() -> int:
                 f"{metadata['username'] or 'inconnu'}"
             )
 
-        OUTPUT_ROOT.mkdir(
+        output_root.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        with MANIFEST_PATH.open(
-            "w",
-            encoding="utf-8-sig",
-            newline="",
-        ) as csv_file:
-            writer = csv.DictWriter(
-                csv_file,
-                delimiter=";",
-                fieldnames=[
-                    "screenshot_id",
-                    "filename",
-                    "original_filename",
-                    "date",
-                    "user_id",
-                    "username",
-                    "guild_id",
-                    "message_id",
-                    "screen_hash",
-                    "width",
-                    "height",
-                    "format",
-                    "file_size_bytes",
-                ],
-            )
-
-            writer.writeheader()
-            writer.writerows(manifest_rows)
+        write_manifest(
+            manifest_path=manifest_path,
+            rows=manifest_rows,
+        )
 
         dates = [
             row["date"]
@@ -497,6 +742,9 @@ def main() -> int:
 
         print()
         print("Résumé du lot :")
+        print(
+            f"- Lot : {batch_name}"
+        )
         print(
             f"- Images exportées : "
             f"{len(manifest_rows)}"
@@ -533,8 +781,16 @@ def main() -> int:
             print(f"- {image_format}: {count}")
 
         print()
-        print(f"Images : {RAW_DIRECTORY}")
-        print(f"Manifeste : {MANIFEST_PATH}")
+        print(f"Images : {raw_directory}")
+        print(f"Manifeste : {manifest_path}")
+
+        if errors:
+            print()
+            print(
+                "Attention : le lot contient moins d'images que demandé "
+                "à cause d'erreurs de lecture.",
+                file=sys.stderr,
+            )
 
         return 0 if manifest_rows else 1
 
@@ -543,6 +799,8 @@ def main() -> int:
         RuntimeError,
         ValueError,
         TypeError,
+        OSError,
+        csv.Error,
     ) as error:
         print(
             "Échec de la création du lot.",

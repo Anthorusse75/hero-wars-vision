@@ -61,243 +61,6 @@ class Detection:
     left_support: int
     right_support: int
     candidate_count: int
-    method: str = "contour"
-    prior_name: str = ""
-    prior_deviation: float = 0.0
-
-
-@dataclass(frozen=True)
-class LayoutPrior:
-    name: str
-    minimum_ratio: float
-    maximum_ratio: float
-    left_center_x_ratio: float
-    right_center_x_ratio: float
-    row_center_y_ratios: tuple[float, float, float, float, float]
-    frame_width_ratio: float
-    frame_height_ratio: float
-
-    def matches(self, image_width: int, image_height: int) -> bool:
-        ratio = image_width / image_height
-        return self.minimum_ratio <= ratio <= self.maximum_ratio
-
-
-# Gabarits normalisés provenant de géométries validées manuellement.
-# Ils servent uniquement de garde-fou ou de secours lorsque les contours
-# décoratifs masquent une ligne entière. Le détecteur par contours reste
-# prioritaire sur les autres formats.
-LAYOUT_PRIORS = (
-    LayoutPrior(
-        name="wide_hero_stats",
-        minimum_ratio=2.06,
-        maximum_ratio=2.24,
-        left_center_x_ratio=0.23755,
-        right_center_x_ratio=0.76245,
-        row_center_y_ratios=(
-            0.21557,
-            0.38453,
-            0.54926,
-            0.71928,
-            0.88718,
-        ),
-        frame_width_ratio=0.06934,
-        frame_height_ratio=0.15996,
-    ),
-    LayoutPrior(
-        name="tablet_4_3_hero_stats",
-        minimum_ratio=1.30,
-        maximum_ratio=1.37,
-        left_center_x_ratio=0.17950,
-        right_center_x_ratio=0.82050,
-        row_center_y_ratios=(
-            0.15843,
-            0.28488,
-            0.41182,
-            0.53876,
-            0.66521,
-        ),
-        frame_width_ratio=0.08430,
-        frame_height_ratio=0.11240,
-    ),
-)
-
-
-def select_layout_prior(
-    image_width: int,
-    image_height: int,
-) -> LayoutPrior | None:
-    matching = [
-        prior
-        for prior in LAYOUT_PRIORS
-        if prior.matches(image_width, image_height)
-    ]
-
-    if not matching:
-        return None
-
-    ratio = image_width / image_height
-
-    return min(
-        matching,
-        key=lambda prior: abs(
-            ratio
-            - (
-                prior.minimum_ratio
-                + prior.maximum_ratio
-            )
-            / 2
-        ),
-    )
-
-
-def prior_geometry(
-    prior: LayoutPrior,
-    image_width: int,
-    image_height: int,
-    candidate_count: int,
-) -> Detection:
-    row_centers = tuple(
-        ratio * image_height
-        for ratio in prior.row_center_y_ratios
-    )
-
-    row_steps = [
-        row_centers[index + 1] - row_centers[index]
-        for index in range(4)
-    ]
-
-    return Detection(
-        left_center_x=prior.left_center_x_ratio * image_width,
-        right_center_x=prior.right_center_x_ratio * image_width,
-        row_centers_y=row_centers,
-        frame_width=prior.frame_width_ratio * image_width,
-        frame_height=prior.frame_height_ratio * image_height,
-        row_step=float(np.median(row_steps)),
-        mean_alignment_error=0.0,
-        left_support=0,
-        right_support=0,
-        candidate_count=candidate_count,
-        method="layout_prior_fallback",
-        prior_name=prior.name,
-        prior_deviation=0.0,
-    )
-
-
-def prior_completion_needed(
-    observations: np.ndarray,
-    prior_centers: np.ndarray,
-    frame_height: float,
-) -> bool:
-    if len(observations) == 0:
-        return True
-
-    matched = [
-        bool(
-            np.any(
-                np.abs(observations - center)
-                <= 0.25 * frame_height
-            )
-        )
-        for center in prior_centers
-    ]
-
-    # Cas typique rencontré : les contours détectent les lignes 2 à 5,
-    # puis l'ancien ajustement les interprète comme les lignes 1 à 4.
-    missing_top = (
-        not matched[0]
-        and sum(matched[1:]) >= 3
-    )
-    missing_bottom = (
-        not matched[-1]
-        and sum(matched[:-1]) >= 3
-    )
-
-    return missing_top or missing_bottom
-
-
-def stabilize_with_prior(
-    detection: Detection,
-    prior: LayoutPrior,
-    image_width: int,
-    image_height: int,
-    force_prior_rows: bool,
-) -> Detection:
-    expected = prior_geometry(
-        prior=prior,
-        image_width=image_width,
-        image_height=image_height,
-        candidate_count=detection.candidate_count,
-    )
-
-    frame_width = detection.frame_width
-    frame_height = detection.frame_height
-    left_center_x = detection.left_center_x
-    right_center_x = detection.right_center_x
-    row_centers = detection.row_centers_y
-    method = detection.method
-    changed = False
-
-    width_ratio = frame_width / expected.frame_width
-    height_ratio = frame_height / expected.frame_height
-
-    if not 0.88 <= width_ratio <= 1.15:
-        frame_width = expected.frame_width
-        changed = True
-
-    if not 0.88 <= height_ratio <= 1.15:
-        frame_height = expected.frame_height
-        changed = True
-
-    maximum_x_error = 0.25 * expected.frame_width
-
-    if abs(left_center_x - expected.left_center_x) > maximum_x_error:
-        left_center_x = expected.left_center_x
-        changed = True
-
-    if abs(right_center_x - expected.right_center_x) > maximum_x_error:
-        right_center_x = expected.right_center_x
-        changed = True
-
-    row_deviation = float(
-        np.mean(
-            np.abs(
-                np.asarray(row_centers)
-                - np.asarray(expected.row_centers_y)
-            )
-        )
-        / max(expected.frame_height, 1.0)
-    )
-
-    if force_prior_rows or row_deviation > 0.35:
-        row_centers = expected.row_centers_y
-        changed = True
-
-    row_steps = [
-        row_centers[index + 1] - row_centers[index]
-        for index in range(4)
-    ]
-    row_step = float(np.median(row_steps))
-
-    if force_prior_rows:
-        method = "contour_prior_completed"
-    elif changed:
-        method = "contour_prior_guard"
-
-    return Detection(
-        left_center_x=float(left_center_x),
-        right_center_x=float(right_center_x),
-        row_centers_y=tuple(float(value) for value in row_centers),
-        frame_width=float(frame_width),
-        frame_height=float(frame_height),
-        row_step=row_step,
-        mean_alignment_error=detection.mean_alignment_error,
-        left_support=detection.left_support,
-        right_support=detection.right_support,
-        candidate_count=detection.candidate_count,
-        method=method,
-        prior_name=prior.name if changed or force_prior_rows else "",
-        prior_deviation=row_deviation,
-    )
 
 
 def find_images() -> list[Path]:
@@ -598,7 +361,6 @@ def fit_five_rows(
     observations: np.ndarray,
     frame_height: float,
     image_height: int,
-    prior_centers: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float, float]:
     possible_steps: list[float] = []
 
@@ -680,17 +442,6 @@ def fit_five_rows(
                     - matched_count * 0.25 * frame_height
                 )
 
-                if prior_centers is not None:
-                    prior_penalty = float(
-                        np.mean(
-                            np.abs(
-                                centers
-                                - prior_centers
-                            )
-                        )
-                    )
-                    score += 0.85 * prior_penalty
-
                 if (
                     best_result is None
                     or score < best_result[0]
@@ -724,21 +475,9 @@ def fit_five_rows(
 
 def detect_avatar_grid(image_bgr: np.ndarray) -> Detection:
     image_height, image_width = image_bgr.shape[:2]
-    prior = select_layout_prior(
-        image_width=image_width,
-        image_height=image_height,
-    )
     candidates = build_candidates(image_bgr)
 
     if not candidates:
-        if prior is not None:
-            return prior_geometry(
-                prior=prior,
-                image_width=image_width,
-                image_height=image_height,
-                candidate_count=0,
-            )
-
         raise RuntimeError("Aucun cadre candidat détecté.")
 
     left_column = select_column(
@@ -754,14 +493,6 @@ def detect_avatar_grid(image_bgr: np.ndarray) -> Detection:
     )
 
     if left_column is None and right_column is None:
-        if prior is not None:
-            return prior_geometry(
-                prior=prior,
-                image_width=image_width,
-                image_height=image_height,
-                candidate_count=len(candidates),
-            )
-
         raise RuntimeError(
             "Aucune colonne d'avatars détectée."
         )
@@ -843,80 +574,15 @@ def detect_avatar_grid(image_bgr: np.ndarray) -> Detection:
         dtype=np.float64,
     )
 
-    (
-        unconstrained_centers,
-        unconstrained_step,
-        unconstrained_error,
-    ) = fit_five_rows(
-        observations=y_observations,
-        frame_height=frame_height,
-        image_height=image_height,
-        prior_centers=None,
-    )
-
-    row_centers = unconstrained_centers
-    row_step = unconstrained_step
-    mean_alignment_error = unconstrained_error
-    force_prior_rows = False
-
-    if prior is not None:
-        prior_centers = np.asarray(
-            [
-                ratio * image_height
-                for ratio in prior.row_center_y_ratios
-            ],
-            dtype=np.float64,
-        )
-
-        (
-            guided_centers,
-            guided_step,
-            guided_error,
-        ) = fit_five_rows(
+    row_centers, row_step, mean_alignment_error = (
+        fit_five_rows(
             observations=y_observations,
             frame_height=frame_height,
             image_height=image_height,
-            prior_centers=prior_centers,
         )
+    )
 
-        expected_frame_height = (
-            prior.frame_height_ratio
-            * image_height
-        )
-
-        unconstrained_deviation = float(
-            np.mean(
-                np.abs(
-                    unconstrained_centers
-                    - prior_centers
-                )
-            )
-            / max(expected_frame_height, 1.0)
-        )
-
-        guided_deviation = float(
-            np.mean(
-                np.abs(
-                    guided_centers
-                    - prior_centers
-                )
-            )
-            / max(expected_frame_height, 1.0)
-        )
-
-        # Le gabarit ne corrige la grille que si l'ajustement libre a
-        # manifestement décalé toutes les lignes d'un rang complet.
-        if (
-            unconstrained_deviation > 0.35
-            and guided_deviation + 0.15
-            < unconstrained_deviation
-        ):
-            row_centers = guided_centers
-            row_step = guided_step
-            mean_alignment_error = guided_error
-            force_prior_rows = True
-
-    detection = Detection(
+    return Detection(
         left_center_x=float(left_center_x),
         right_center_x=float(right_center_x),
         row_centers_y=tuple(
@@ -938,31 +604,10 @@ def detect_avatar_grid(image_bgr: np.ndarray) -> Detection:
             else 0
         ),
         candidate_count=len(candidates),
-        method="contour",
     )
-
-    if prior is not None:
-        detection = stabilize_with_prior(
-            detection=detection,
-            prior=prior,
-            image_width=image_width,
-            image_height=image_height,
-            force_prior_rows=force_prior_rows,
-        )
-
-    return detection
 
 
 def detection_status(detection: Detection) -> str:
-    if detection.method == "layout_prior_fallback":
-        return "REVIEW"
-
-    if detection.method in {
-        "contour_prior_completed",
-        "contour_prior_guard",
-    }:
-        return "REVIEW"
-
     strongest_support = max(
         detection.left_support,
         detection.right_support,
@@ -1033,9 +678,9 @@ def avatar_boxes(
             # Zone du nom, calculée relativement au cadre détecté.
             if side == "L":
                 name_x1 = int(round(x2 + 0.10 * width))
-                name_x2 = int(round(x2 + 1.68 * width))
+                name_x2 = int(round(x2 + 2.40 * width))
             else:
-                name_x1 = int(round(x1 - 1.68 * width))
+                name_x1 = int(round(x1 - 2.40 * width))
                 name_x2 = int(round(x1 - 0.10 * width))
 
             name_box = (
@@ -1044,7 +689,7 @@ def avatar_boxes(
                 min(image_width, name_x2),
                 min(
                     image_height,
-                    int(round(y1 + 0.28 * height)),
+                    int(round(y1 + 0.32 * height)),
                 ),
             )
 
@@ -1117,8 +762,7 @@ def create_debug_image(
             f"support L/R="
             f"{detection.left_support}/"
             f"{detection.right_support} | "
-            f"error={detection.mean_alignment_error:.3f} | "
-            f"method={detection.method}"
+            f"error={detection.mean_alignment_error:.3f}"
         ),
         fill="lime" if status == "OK" else "yellow",
         stroke_width=2,
@@ -1154,8 +798,7 @@ def create_debug_image(
         f"{status} | "
         f"L/R={detection.left_support}/"
         f"{detection.right_support} | "
-        f"erreur={detection.mean_alignment_error:.3f} | "
-        f"{detection.method}"
+        f"erreur={detection.mean_alignment_error:.3f}"
     )
 
     return debug_path, label
@@ -1295,15 +938,11 @@ def main() -> int:
         "REVIEW": 0,
         "FAIL": 0,
     }
-    method_counts: dict[str, int] = {}
 
     print(f"Images à analyser : {len(image_paths)}")
     print()
 
     for index, source_path in enumerate(image_paths, start=1):
-        image_width: int | str = ""
-        image_height: int | str = ""
-
         try:
             image_bgr = cv2.imread(
                 str(source_path),
@@ -1327,10 +966,6 @@ def main() -> int:
 
             debug_items.append((debug_path, label))
             status_counts[status] += 1
-            method_counts[detection.method] = (
-                method_counts.get(detection.method, 0)
-                + 1
-            )
 
             manifest_rows.append(
                 {
@@ -1374,11 +1009,6 @@ def main() -> int:
                     "left_support": detection.left_support,
                     "right_support": detection.right_support,
                     "candidate_count": detection.candidate_count,
-                    "detection_method": detection.method,
-                    "layout_prior": detection.prior_name,
-                    "prior_deviation": (
-                        f"{detection.prior_deviation:.6f}"
-                    ),
                     "debug_file": debug_path.as_posix(),
                     "error": "",
                 }
@@ -1391,7 +1021,6 @@ def main() -> int:
                 f"{detection.right_support} | "
                 f"erreur="
                 f"{detection.mean_alignment_error:.3f} | "
-                f"{detection.method:<23} | "
                 f"{source_path.name}"
             )
 
@@ -1406,8 +1035,8 @@ def main() -> int:
             manifest_rows.append(
                 {
                     "source_filename": source_path.name,
-                    "source_width": image_width,
-                    "source_height": image_height,
+                    "source_width": "",
+                    "source_height": "",
                     "status": "FAIL",
                     "left_center_x": "",
                     "right_center_x": "",
@@ -1423,9 +1052,6 @@ def main() -> int:
                     "left_support": "",
                     "right_support": "",
                     "candidate_count": "",
-                    "detection_method": "failed",
-                    "layout_prior": "",
-                    "prior_deviation": "",
                     "debug_file": "",
                     "error": str(error),
                 }
@@ -1456,9 +1082,6 @@ def main() -> int:
         "left_support",
         "right_support",
         "candidate_count",
-        "detection_method",
-        "layout_prior",
-        "prior_deviation",
         "debug_file",
         "error",
     ]
@@ -1501,14 +1124,6 @@ def main() -> int:
     print(f"- OK : {status_counts['OK']}")
     print(f"- REVIEW : {status_counts['REVIEW']}")
     print(f"- FAIL : {status_counts['FAIL']}")
-    print("- Méthodes :")
-
-    for method, count in sorted(
-        method_counts.items(),
-        key=lambda item: (-item[1], item[0]),
-    ):
-        print(f"  - {method:<24} : {count}")
-
     print(f"- Manifeste : {MANIFEST_PATH}")
     print(f"- Rapports : {OUTPUT_DIR}")
 

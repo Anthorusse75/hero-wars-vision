@@ -1,0 +1,13 @@
+## master...origin/master
+ M data/catalog/hero_appearances.csv
+ M data/catalog/hero_avatar_manifest.csv
+ M data/catalog/hero_name_aliases.csv
+ M data/catalog/heroes.csv
+?? audit_project_structure.py
+?? data/catalog/backups/
+?? hero_catalog_update_inputs.zip
+?? scripts/apply_hero_batch_001_review.py
+?? scripts/group_reconciliation_review.py
+?? scripts/match_dynamic_crops_to_catalog.py
+?? scripts/ocr_dynamic_hero_names.py
+?? scripts/reconcile_visual_ocr.py

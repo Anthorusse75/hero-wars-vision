@@ -1,0 +1,66 @@
+AUDIT DU PROJET
+================================================================================
+Racine : D:\02 Developpement\03 Projet Model\hero-wars-vision
+Date : 2026-07-29T09:33:34
+
+Résumé général
+--------------------------------------------------------------------------------
+Fichiers analysés : 8376
+Taille analysée : 641.39 Mo
+Scripts Python : 26
+Fichiers suivis par Git présents : 30
+Fichiers non suivis par Git présents : 8346
+Groupes de doublons exacts : 248
+Candidats de nettoyage : 10
+
+Répartition par catégorie
+--------------------------------------------------------------------------------
+- generated_crops          :   7803 fichiers — 376.18 Mo
+- reports                  :    375 fichiers — 113.95 Mo
+- raw_data                 :    100 fichiers — 119.88 Mo
+- data_other               :     53 fichiers — 30.31 Mo
+- scripts                  :     24 fichiers — 328.65 Ko
+- project_root_or_other    :      7 fichiers — 111.84 Ko
+- catalog_backups          :      5 fichiers — 305.97 Ko
+- catalog                  :      4 fichiers — 74.24 Ko
+- manifests                :      2 fichiers — 40.83 Ko
+- batch_data               :      1 fichiers — 26.13 Ko
+- validated                :      1 fichiers — 206.75 Ko
+- source                   :      1 fichiers — 0 o
+
+20 répertoires les plus volumineux
+--------------------------------------------------------------------------------
+- data                                                                      640.96 Mo (8344 fichiers)
+- data/batches                                                              547.10 Mo (7447 fichiers)
+- data/batches/hero_batch_001                                               547.10 Mo (7447 fichiers)
+- data/batches/hero_batch_001/crops                                         217.35 Mo (4001 fichiers)
+- data/batches/hero_batch_001/crops/rows                                    122.69 Mo (1000 fichiers)
+- data/batches/hero_batch_001/raw                                           119.88 Mo (100 fichiers)
+- data/batches/hero_batch_001/crops_dynamic_v1                              115.48 Mo (3002 fichiers)
+- data/batches/hero_batch_001/reports                                        94.16 Mo (342 fichiers)
+- data/batches/hero_batch_001/crops_dynamic_v1/avatars_full                  57.05 Mo (1000 fichiers)
+- data/batches/hero_batch_001/crops/avatars_full                             47.03 Mo (1000 fichiers)
+- data/crops                                                                 43.35 Mo (800 fichiers)
+- data/crops/hero                                                            43.35 Mo (800 fichiers)
+- data/batches/hero_batch_001/crops_dynamic_v1/avatars_inner                 41.29 Mo (1000 fichiers)
+- data/batches/hero_batch_001/crops/avatars_inner                            33.92 Mo (1000 fichiers)
+- data/batches/hero_batch_001/reports/frame_detection_v1                     28.89 Mo (105 fichiers)
+- data/batches/hero_batch_001/reports/crop_layout_check_v2                   28.56 Mo (104 fichiers)
+- data/batches/hero_batch_001/reports/crop_layout_check                      28.48 Mo (104 fichiers)
+- data/samples                                                               26.28 Mo (32 fichiers)
+- data/batches/hero_batch_001/reports/frame_detection_v1/debug               25.17 Mo (100 fichiers)
+- data/batches/hero_batch_001/reports/crop_layout_check/debug                24.78 Mo (100 fichiers)
+
+Fichiers produits
+--------------------------------------------------------------------------------
+- tree_compact.txt : arborescence lisible et résumée
+- tree_full.txt : arborescence complète
+- files.csv : inventaire détaillé de chaque fichier
+- directories.csv : taille et contenu de chaque répertoire
+- scripts.csv : inventaire et dépendances des scripts Python
+- duplicate_files.csv : doublons exacts détectés
+- cleanup_candidates.csv : propositions sans suppression
+- git_status.txt : état Git actuel
+- report.json : version structurée du résumé
+
+Aucun fichier du projet n'a été supprimé ou modifié.

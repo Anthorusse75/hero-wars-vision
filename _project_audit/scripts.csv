@@ -1,0 +1,401 @@
+﻿path;tracked;size_bytes;size_human;has_main_function;function_count;class_count;imports;path_literals;syntax_error
+audit_project_structure.py;0;31774;31.03 Ko;1;19;0;__future__ | ast | collections | csv | datetime | hashlib | json | os | pathlib | subprocess | sys | zipfile;.csv | .github/ | .html | .jpg | .json | .png | .txt | .zip | / | /  [ | / [ | /crops | /raw | /raw/ | /reports/ | /validated/ | \ | cleanup_candidates.csv | data/ | data/batches/ | data/batches/hero_batch_001/crops | data/batches/hero_batch_001/crops_dynamic_v1/fallback_debug | data/batches/hero_batch_001/reports/anchored_clusters | data/batches/hero_batch_001/reports/catalog_update_preview | data/batches/hero_batch_001/reports/frame_detection_v1 | data/batches/hero_batch_001/reports/visual_matching | data/catalog/ | data/catalog/backups | data/catalog/backups/ | data/crops/ | data/crops/hero | data/manifests/ | data/reports | data/reports/ | directories.csv | docs/ | duplicate_files.csv | files.csv | git_status.txt | project_audit_report.zip | report.json | scripts.csv | scripts/ | src/ | summary.txt | tests/ | tree_compact.txt | tree_full.txt;
+scripts/apply_hero_batch_001_review.py;0;37983;37.09 Ko;1;13;0;__future__ | argparse | collections | csv | datetime | os | pathlib | re | shutil | sys | tempfile | typing | unicodedata;/ | HW_HERO_(\d+) | catalog_update_summary.txt | crop_manifest.csv | data/batches/hero_batch_001 | data/catalog/backups | data/catalog/hero_appearances.csv | data/catalog/hero_avatar_manifest.csv | data/catalog/hero_name_aliases.csv | data/catalog/heroes.csv | data/curation/hero_batch_001_review_decisions.csv | hero_appearances.proposed.csv | hero_avatar_manifest.proposed.csv | hero_identity_manifest.csv | hero_identity_manifest.proposed.csv | hero_name_aliases.proposed.csv | heroes.proposed.csv | python scripts/apply_hero_batch_001_review.py --apply | reconciliation_results.csv | reconciliation_results.proposed.csv | review_group_members.csv | review_groups.csv;
+scripts/build_cluster_manifest.py;1;9789;9.56 Ko;1;4;0;__future__ | cluster_hero_avatars | collections | csv | pathlib | re | sys | torch | unicodedata;data/manifests | hero_avatar_manifest.csv | hero_visual_clusters.csv;
+scripts/check_batch_crop_layout.py;1;8981;8.77 Ko;1;4;0;PIL | __future__ | crop_hero_samples | math | pathlib | sys;.jpg | .png | / | __crop_debug.jpg | data/batches/hero_batch_001/raw | data/batches/hero_batch_001/reports/crop_layout_check;
+scripts/check_batch_crop_layout_v2.py;1;13680;13.36 Ko;1;6;0;PIL | __future__ | crop_hero_samples | math | pathlib | sys;.jpg | .png | / | __crop_debug.jpg | data/batches/hero_batch_001/raw | data/batches/hero_batch_001/reports/crop_layout_check_v2;
+scripts/cluster_batch_with_catalog_anchors.py;1;22606;22.08 Ko;1;10;0;__future__ | cluster_hero_avatars | collections | csv | html | os | pathlib | sys | time | torch | urllib.parse;"
+                    </div>
+
+                    <div class=""filename"">
+                         | 
+                    </div>
+
+                    <div class=""metrics"">
+                        Statut initial :
+                         | 
+                    </div>
+                </article>
+                 | 
+                </div>
+
+                <div class=""cards"">
+                     | 
+                </div>
+            </section>
+             | 
+            </li>
+
+            <li>
+                CONFLICT :
+                 | 
+            </li>
+
+            <li>
+                UNANCHORED :
+                 | 
+            </li>
+
+            <li>
+                UNRESOLVED :
+                 | 
+            </li>
+        </ul>
+
+        <h3>Avatars après consensus de groupe</h3>
+
+        <ul>
+            <li>
+                ASSIGNED :
+                 | 
+            </li>
+        </ul>
+
+        <p>
+            Avatars REVIEW, UNKNOWN ou AMBIGUOUS
+            récupérés grâce au groupe :
+            <strong> | 
+</body>
+</html>
+ |  avatar(s)
+                </h2>
+
+                <div class=""cluster-summary"">
+                    <strong>Statut :</strong>
+                     | .
+        </p>
+
+        <h3>Groupes</h3>
+
+        <ul>
+            <li>
+                ANCHORED :
+                 | / | </strong>
+        </p>
+
+        <p>
+            Les images du nom sont affichées uniquement pour
+            faciliter le contrôle humain. Elles ne participent
+            jamais à la création des groupes.
+        </p>
+    </section>
+
+     | </strong>
+        </p>
+
+        <p>
+            Un ancrage fort exige :
+            similarité ≥  | <br>
+
+                    <strong>Ancrages forts :</strong>
+                     | <br>
+
+                    <strong>Cas récupérés :</strong>
+                     | <br>
+
+                    <strong>Détail des ancrages :</strong>
+                     | <br>
+
+                    <strong>Identité proposée :</strong>
+                     | <div class=""anchor-badge"">ANCRAGE FORT</div> | \ | cluster_assignments.csv | cluster_review.html | cluster_summary.csv | crops/avatars_inner | crops/names | data/batches/hero_batch_001 | data/catalog/heroes.csv | reports/anchored_clusters | reports/visual_matching/visual_match_results.csv";
+scripts/cluster_hero_avatars.py;1;18539;18.10 Ko;1;13;1;PIL | __future__ | collections | csv | html | numpy | os | pathlib | scipy.cluster.hierarchy | scipy.spatial.distance | sys | time | torch | torch.nn.functional | torch.utils.data | torchvision.models | unicodedata | urllib.parse;"
+                    </div>
+                    <div class=""filename"">
+                         | 
+                    </div>
+                </div>
+                 | 
+                    </strong><br>
+                    Similarité moyenne :
+                     | 
+                </div>
+            </section>
+             | 
+                </p>
+
+                <div class=""cards"">
+                     | 
+                </strong>
+            </li>
+
+            <li>
+                Noms répartis dans plusieurs groupes :
+                <strong>
+                     | 
+                </strong>
+            </li>
+        </ul>
+
+        <p>
+            Groupes mélangés :
+             | 
+            </li>
+
+            <li>
+                Groupes d’un seul avatar :
+                 | 
+            </li>
+
+            <li>
+                Groupes mélangeant plusieurs noms OCR :
+                <strong>
+                     | 
+        </li>
+         | 
+        </p>
+
+        <h3>Noms éclatés entre plusieurs groupes</h3>
+
+        <ul>
+             | 
+        </ul>
+
+        <p>
+            Les noms OCR servent uniquement au contrôle.
+            Ils ne sont pas utilisés pour créer les groupes.
+        </p>
+    </section>
+
+     | 
+</body>
+</html>
+ |  avatar(s)
+                </h2>
+
+                <p>
+                    Groupe technique :  | .html | .jpg | .png | / | </strong>
+        </p>
+
+        <ul>
+            <li>
+                Groupes :
+                 | <li>Aucun</li> | \ | data/crops/hero/avatars_inner | data/reports/avatar_clusters | data/reports/hero_names_ocr.csv | summary.csv";
+scripts/create_contact_sheets.py;1;4220;4.12 Ko;1;3;0;PIL | __future__ | math | pathlib | sys;.jpg | .png | _contact_sheet.jpg | data/reports | data/samples;
+scripts/create_hero_catalog.py;1;7336;7.16 Ko;1;3;0;__future__ | collections | csv | pathlib | sys;data/catalog | data/manifests/hero_avatar_manifest.csv | data/manifests/hero_visual_clusters.csv | hero_appearances.csv | hero_avatar_manifest.csv | hero_name_aliases.csv | heroes.csv;
+scripts/create_validation_contact_sheets.py;1;5681;5.55 Ko;1;5;0;PIL | __future__ | math | pathlib | sys;.jpg | .png | / | data/batches/hero_batch_001/raw | data/batches/hero_batch_001/reports;
+scripts/crop_hero_samples.py;1;13888;13.56 Ko;1;6;0;PIL | __future__ | math | pathlib | re | sys;- data/reports/hero_avatar_sheet.jpg | - data/reports/hero_crop_overview.jpg | - data/reports/hero_name_sheet.jpg | - data/reports/hero_row_sheet.jpg | .jpg | .png | ^(\d+) | __debug.jpg | data/crops/hero | data/reports | data/samples/hero | hero_avatar_sheet.jpg | hero_crop_overview.jpg | hero_name_sheet.jpg | hero_row_sheet.jpg;
+scripts/detect_avatar_frames_batch.py;1;29370;28.68 Ko;1;13;2;PIL | __future__ | csv | cv2 | dataclasses | math | numpy | pathlib | sys; | L/R= |  | support L/R= | .jpg | .png | / | __frame_detection.jpg | data/batches/hero_batch_001/raw | data/batches/hero_batch_001/reports/frame_detection_v1 | frame_detection_manifest.csv;
+scripts/export_sample.py;1;4762;4.65 Ko;1;5;0;PIL | __future__ | dotenv | hashlib | io | os | pathlib | pymysql | pymysql.cursors | re | sys | typing;".jpg | .png | [<>:""/\\|?*] | data/sample";
+scripts/export_samples.py;1;5939;5.80 Ko;1;7;0;PIL | __future__ | collections | dotenv | io | os | pathlib | pymysql | pymysql.connections | pymysql.cursors | re | sys | typing;".jpg | .png | [<>:""/\\|?*] | data/samples";
+scripts/export_validation_batch.py;1;14407;14.07 Ko;1;10;0;PIL | __future__ | collections | csv | dotenv | io | os | pathlib | pymysql | pymysql.connections | pymysql.cursors | random | re | sys | typing;"
+    Détecte les captures déjà exportées dans data/sample
+    ou data/samples grâce à l'identifiant placé au début du nom.
+     | .jpg | .png | / | [<>:""/\\|?*] | ^(\d+) | batch_manifest.csv | data/batches | data/sample | data/samples";
+scripts/extract_dynamic_frame_crops.py;1;17566;17.15 Ko;1;15;0;PIL | __future__ | csv | math | pathlib | statistics | sys | typing;.jpg | .png | / | __fallback.jpg | crop_manifest.csv | data/batches/hero_batch_001 | reports/frame_detection_v1/frame_detection_manifest.csv;
+scripts/extract_validation_batch_crops.py;1;11374;11.11 Ko;1;4;0;PIL | __future__ | check_batch_crop_layout_v2 | collections | crop_hero_samples | csv | pathlib | re | sys;.jpg | .png | / | ^(?P<id>\d+) | crop_manifest.csv | data/batches/hero_batch_001;
+scripts/group_reconciliation_review.py;0;21897;21.38 Ko;1;13;0;__future__ | collections | csv | html | os | pathlib | re | sys | unicodedata | urllib.parse;"
+                        </span><br>
+
+                        Confiance :
+                         | 
+                    </p>
+
+                    <p class=""filename"">
+                         | 
+                    </p>
+
+                    <p>
+                        <strong>OCR :</strong>
+                        <span class=""ocr"">
+                             | 
+                    </p>
+                </article>
+                 | 
+                </div>
+
+                 | 
+                </div>
+            </section>
+             | 
+            </tbody>
+        </table>
+    </section>
+
+     | 
+        </ul>
+
+        <p>
+            Groupes créés :  | 
+</body>
+</html>
+ |  autre(s) membre(s) sont présents dans le CSV.</p> |  cas
+                </h2>
+
+                <div class=""summary"">
+                    <strong>OCR représentatif :</strong>
+                     | ""
+                    >
+
+                    <p>
+                        <strong>Visuel :</strong>
+                         | / | </li> | </td>
+                <td class=""ocr""> | </td>
+                <td> | </td>
+            </tr>
+             | <br>
+
+                    <strong>Correspondances OCR catalogue :</strong>
+                     | <br>
+
+                    <strong>Prédictions visuelles :</strong>
+                     | <br>
+
+                    <strong>Statuts visuels :</strong>
+                     | <br>
+
+                    <strong>Variantes OCR :</strong>
+                     | \ | alias_candidates.csv | data/batches/hero_batch_001 | reconciliation_results.csv | review_group_members.csv | review_groups.csv | review_groups.html";
+scripts/inspect_screenshots.py;1;6290;6.14 Ko;1;4;0;__future__ | dotenv | os | pymysql | pymysql.connections | pymysql.cursors | sys | typing;;
+scripts/match_batch_avatars_to_catalog.py;1;24888;24.30 Ko;1;14;0;__future__ | cluster_hero_avatars | collections | csv | html | numpy | os | pathlib | re | sys | time | torch | urllib.parse;"
+                </h2>
+
+                <p>
+                    <strong>Statut :</strong>
+                     | 
+                </p>
+
+                <p class=""alternatives"">
+                    <strong>Top 3 :</strong><br>
+                    1.  | 
+                </p>
+            </article>
+             | 
+        </p>
+    </section>
+
+    <main class=""grid"">
+         | 
+    </main>
+</body>
+</html>
+ | ""
+                        >
+                    </div>
+
+                    <div class=""arrow"">→</div>
+
+                    <div>
+                        <div class=""caption"">Référence la plus proche</div>
+                        <img
+                            src="" | ""
+                        >
+                    </div>
+                </div>
+
+                <h2>
+                     | "">
+                <div class=""images"">
+                    <div>
+                        <div class=""caption"">Avatar analysé</div>
+                        <img
+                            src="" | )
+                </p>
+
+                <p class=""filename"">
+                     | - Marge même héros / mauvais héros : min= | .
+        </p>
+
+        <p>
+            Cartes affichées :  | / | <br>
+
+                    <strong>Apparence :</strong>
+                     | <br>
+
+                    <strong>Capture :</strong>
+                     | <br>
+
+                    <strong>Marge :</strong>
+                     | <br>
+
+                    <strong>Similarité :</strong>
+                     | \ | ^(?P<screenshot_id>\d+).*__(?P<side>[LR])(?P<slot>[1-5])$ | data/batches/hero_batch_001/crops/avatars_inner | data/batches/hero_batch_001/reports/visual_matching | data/catalog/hero_avatar_manifest.csv | data/catalog/heroes.csv | data/crops/hero/avatars_inner | predicted_hero_counts.csv | visual_match_results.csv | visual_match_review.html";
+scripts/match_dynamic_crops_to_catalog.py;0;860;860 o;0;0;0;__future__ | match_batch_avatars_to_catalog | pathlib;data/batches/hero_batch_001/crops_dynamic_v1/avatars_inner | data/batches/hero_batch_001/reports/visual_matching_dynamic_v1 | predicted_hero_counts.csv | visual_match_results.csv | visual_match_review.html;
+scripts/ocr_dynamic_hero_names.py;0;14255;13.92 Ko;1;9;0;PIL | __future__ | csv | easyocr | html | numpy | os | pathlib | re | sys | time | unicodedata | urllib.parse;"
+                </td>
+                <td> | 
+        </tbody>
+    </table>
+</body>
+</html>
+ | 
+    Exemples dans Git Bash :
+
+    OCR_LANGUAGES=fr,en     python scripts/ocr_dynamic_hero_names.py
+
+    OCR_LANGUAGES=ru,en OCR_USE_ALLOWLIST=0     python scripts/ocr_dynamic_hero_names.py
+     |  seconde/image | ""
+                    >
+                </td>
+                <td class=""ocr"">
+                     | .jpg | .png | / | </td>
+                <td> | </td>
+                <td>
+                    <img
+                        src="" | </td>
+            </tr>
+             | \ | ^(?P<id>\d+) | data/batches/hero_batch_001 | hero_names_ocr.csv | hero_names_ocr_review.html";
+scripts/ocr_hero_names.py;1;11652;11.38 Ko;1;7;0;PIL | __future__ | csv | easyocr | html | numpy | os | pathlib | re | sys | time | unicodedata | urllib.parse;"
+                </td>
+                <td> | 
+        </tbody>
+    </table>
+</body>
+</html>
+ |  seconde/image | ""
+                    >
+                </td>
+                <td class=""ocr"">
+                     | .jpg | .png | / | </td>
+                <td> | </td>
+                <td>
+                    <img
+                        src="" | </td>
+            </tr>
+             | \ | ^(?P<id>\d+) | data/crops/hero/names | data/reports | hero_names_ocr.csv | hero_names_ocr_review.html";
+scripts/reconcile_visual_ocr.py;0;28714;28.04 Ko;1;14;0;__future__ | collections | csv | difflib | html | os | pathlib | re | statistics | sys | unicodedata | urllib.parse;"
+                    </span><br>
+
+                    Confiance :
+                     | 
+                </p>
+
+                <p class=""filename"">
+                    Capture  | 
+                </p>
+
+                <p>
+                    <strong>OCR :</strong>
+                    <span class=""ocr"">
+                         | 
+                </p>
+
+                <p>
+                    <strong>Résultat final :</strong>
+                     | 
+                </p>
+            </article>
+             | 
+            </tbody>
+        </table>
+    </section>
+
+    <main class=""grid"">
+         | 
+    </main>
+</body>
+</html>
+ | ""
+                    >
+                </div>
+
+                <h2> | / | </h2>
+
+                <p>
+                    <strong>Visuel :</strong>
+                     | </li> | </td>
+                <td class=""ocr""> | </td>
+                <td> | </td>
+            </tr>
+             | \ | alias_candidates.csv | data/batches/hero_batch_001 | data/catalog/hero_name_aliases.csv | data/catalog/heroes.csv | hero_names_ocr.csv | reconciliation_results.csv | reconciliation_review.html | visual_match_results.csv";
+scripts/test_database.py;1;1862;1.82 Ko;1;2;0;__future__ | dotenv | os | pymysql | pymysql.cursors | sys;;
+src/hero_wars_vision/__init__.py;1;0;0 o;0;0;0;;;

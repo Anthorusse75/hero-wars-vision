@@ -1,0 +1,11 @@
+﻿path;type;size_bytes;size_human;cleanup_level;reason
+scripts/__pycache__;directory;82168;80.24 Ko;SAFE;Cache temporaire recréé automatiquement.
+data/batches/hero_batch_001/crops;directory;227911493;217.35 Mo;LIKELY_SAFE;Anciennes découpes remplacées par crops_dynamic_v1.
+data/batches/hero_batch_001/reports/anchored_clusters;directory;1498321;1.43 Mo;LIKELY_SAFE;Clustering calculé avec les anciennes découpes incorrectes.
+data/batches/hero_batch_001/reports/catalog_update_preview;directory;573329;559.89 Ko;LIKELY_SAFE;Aperçu de simulation conservable seulement à titre de diagnostic.
+data/batches/hero_batch_001/reports/visual_matching;directory;937711;915.73 Ko;LIKELY_SAFE;Rapport calculé avec les anciennes découpes incorrectes.
+data/batches/hero_batch_001/crops_dynamic_v1/fallback_debug;directory;812635;793.59 Ko;REVIEW;Image de diagnostic du fallback, non nécessaire au pipeline final.
+data/batches/hero_batch_001/reports/frame_detection_v1;directory;30293815;28.89 Mo;REVIEW;Rapport de validation de la détection des cadres.
+data/crops/hero;directory;45457298;43.35 Mo;REVIEW;"Jeu initial de 200 références ; peut encore être référencé par le catalogue."
+data/reports;directory;20748945;19.79 Mo;REVIEW;Rapports historiques du catalogue initial.
+data/catalog/backups;directory;313314;305.97 Ko;KEEP_OR_ARCHIVE;Sauvegardes du catalogue : conserver au moins la dernière sauvegarde validée.

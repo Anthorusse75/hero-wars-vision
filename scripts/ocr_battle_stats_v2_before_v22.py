@@ -10,13 +10,11 @@ import re
 import shutil
 import sys
 import time
-import warnings
 from collections import Counter, defaultdict
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-import cv2
 import easyocr
 import numpy as np
 import torch
@@ -322,13 +320,14 @@ def read_variant(
     """
     Exécute EasyOCR avec récupération sur géométrie dégénérée.
 
-    Deux pannes ont été observées dans EasyOCR/OpenCV :
-    - division par zéro puis OverflowError ;
-    - boîte vide transmise à cv2.resize puis cv2.error.
+    Le chemin normal utilise ``readtext`` : détection des zones de texte,
+    puis reconnaissance. Sur certaines images presque uniformes, le détecteur
+    EasyOCR peut produire une boîte de hauteur nulle et provoquer un
+    ``OverflowError`` dans ``get_image_list``.
 
-    Dans ces cas, le détecteur est contourné et la reconnaissance est
-    appliquée directement à l'image complète. Si ce repli échoue aussi,
-    seule la variante concernée est ignorée.
+    Comme chaque découpe de ce pipeline contient déjà une seule valeur
+    numérique, la récupération contourne alors le détecteur et applique le
+    moteur de reconnaissance directement à l'image complète.
     """
     array = np.asarray(image_array)
 
@@ -339,7 +338,7 @@ def read_variant(
 
     height, width = array.shape[:2]
 
-    if height < 2 or width < 2 or array.size == 0:
+    if height < 2 or width < 2:
         raise ValueError(
             f"dimensions OCR invalides : {width}x{height}"
         )
@@ -358,45 +357,31 @@ def read_variant(
         if part
     )
 
-    geometry_errors = (
-        OverflowError,
-        ZeroDivisionError,
-        FloatingPointError,
-        RuntimeWarning,
-        cv2.error,
-    )
-
     try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "error",
-                message=(
-                    "divide by zero encountered "
-                    "in scalar divide"
-                ),
-                category=RuntimeWarning,
-            )
-
-            detections = reader.readtext(
-                array,
-                detail=1,
-                paragraph=False,
-                decoder="greedy",
-                allowlist=DIGIT_ALLOWLIST,
-                text_threshold=0.30,
-                low_text=0.15,
-                link_threshold=0.18,
-                contrast_ths=0.05,
-                adjust_contrast=0.75,
-                add_margin=0.02,
-            )
+        detections = reader.readtext(
+            array,
+            detail=1,
+            paragraph=False,
+            decoder="greedy",
+            allowlist=DIGIT_ALLOWLIST,
+            text_threshold=0.30,
+            low_text=0.15,
+            link_threshold=0.18,
+            contrast_ths=0.05,
+            adjust_contrast=0.75,
+            add_margin=0.02,
+        )
 
         raw_text, digits, confidence = parse_detections(
             detections
         )
         return raw_text, digits, confidence, ""
 
-    except geometry_errors as detector_error:
+    except (
+        OverflowError,
+        ZeroDivisionError,
+        FloatingPointError,
+    ) as detector_error:
         try:
             detections = reader.recognize(
                 array,
@@ -433,11 +418,8 @@ def read_variant(
             OverflowError,
             ZeroDivisionError,
             FloatingPointError,
-            RuntimeWarning,
-            cv2.error,
             ValueError,
             RuntimeError,
-            TypeError,
         ) as fallback_error:
             print(
                 f"[AVERTISSEMENT OCR] "
@@ -459,18 +441,16 @@ def read_variant(
     except (
         ValueError,
         RuntimeError,
-        TypeError,
     ) as error:
         print(
-            f"[AVERTISSEMENT OCR] "
-            f"{location or 'variante inconnue'} : "
+            f"[AVERTISSEMENT OCR] {location or 'variante inconnue'} : "
             f"{type(error).__name__}: {error}",
             file=sys.stderr,
         )
-
         return "", "", 0.0, (
             f"{type(error).__name__}: {error}"
         )
+
 
 def plausible_candidate(
     metric: str,
@@ -926,10 +906,6 @@ def main() -> int:
         output_root
         / "stat_ocr_review.html"
     )
-    checkpoint_csv = (
-        output_root.parent
-        / "stat_ocr_v2_checkpoint.csv"
-    )
 
     if output_root.exists():
         if not args.overwrite:
@@ -948,9 +924,6 @@ def main() -> int:
         shutil.rmtree(
             output_root
         )
-
-    if args.overwrite and checkpoint_csv.exists():
-        checkpoint_csv.unlink()
 
     try:
         _, crop_rows = read_csv(
@@ -1017,29 +990,6 @@ def main() -> int:
         verbose=False,
     )
 
-    detailed_fields = [
-        "screenshot_id",
-        "side",
-        "slot",
-        "slot_status",
-        "hero_uid",
-        "hero_name",
-        "metric",
-        "crop_file",
-        "old_value",
-        "old_confidence",
-        "normalized_digits",
-        "value",
-        "confidence",
-        "votes",
-        "old_agreement",
-        "selected_variant",
-        "candidate_attempts",
-        "score",
-        "status",
-        "changed_from_v1",
-    ]
-
     output_rows: list[
         dict[str, Any]
     ] = []
@@ -1058,85 +1008,13 @@ def main() -> int:
         Counter()
     )
 
-    resume_count = 0
-
-    if checkpoint_csv.exists() and not args.overwrite:
-        checkpoint_fields, checkpoint_rows = read_csv(
-            checkpoint_csv
-        )
-
-        missing_fields = [
-            field
-            for field in detailed_fields
-            if field not in checkpoint_fields
-        ]
-
-        if missing_fields:
-            raise RuntimeError(
-                "Checkpoint invalide, colonnes absentes : "
-                + ", ".join(missing_fields)
-            )
-
-        if len(checkpoint_rows) > len(crop_rows):
-            raise RuntimeError(
-                "Checkpoint invalide : trop de lignes."
-            )
-
-        for position, saved_row in enumerate(
-            checkpoint_rows
-        ):
-            source_row = crop_rows[position]
-
-            saved_key = (
-                str(saved_row.get("screenshot_id") or ""),
-                str(saved_row.get("side") or ""),
-                str(saved_row.get("slot") or ""),
-                str(saved_row.get("metric") or ""),
-                str(saved_row.get("crop_file") or ""),
-            )
-            source_key = (
-                str(source_row.get("screenshot_id") or ""),
-                str(source_row.get("side") or ""),
-                str(source_row.get("slot") or ""),
-                str(source_row.get("metric") or ""),
-                str(source_row.get("crop_file") or ""),
-            )
-
-            if saved_key != source_key:
-                raise RuntimeError(
-                    "Checkpoint incompatible à la ligne "
-                    f"{position + 1}."
-                )
-
-        output_rows.extend(checkpoint_rows)
-        resume_count = len(checkpoint_rows)
-
-        for saved_row in checkpoint_rows:
-            status = str(saved_row.get("status") or "")
-            metric = str(saved_row.get("metric") or "")
-
-            status_counts[status] += 1
-            metric_counts[metric][status] += 1
-
-            if (
-                str(saved_row.get("changed_from_v1") or "")
-                == "1"
-            ):
-                changed_counts[metric] += 1
-
-        print()
-        print(
-            "REPRISE APRÈS CHECKPOINT : "
-            f"{resume_count}/{len(crop_rows)} valeurs déjà calculées."
-        )
-
     start_time = (
         time.perf_counter()
     )
 
     for index, row in enumerate(
-        crop_rows[resume_count:],
-        start=resume_count + 1,
+        crop_rows,
+        start=1,
     ):
         screenshot_id = str(
             row.get("screenshot_id") or ""
@@ -1338,7 +1216,6 @@ def main() -> int:
             FloatingPointError,
             RuntimeError,
             UnidentifiedImageError,
-            cv2.error,
         ) as error:
             result = {
                 "digits": "",
@@ -1439,20 +1316,33 @@ def main() -> int:
                 f"CHANGED={sum(changed_counts.values())}"
             )
 
-        if (
-            index % 500 == 0
-            or index == len(crop_rows)
-        ):
-            write_csv(
-                checkpoint_csv,
-                output_rows,
-                detailed_fields,
-            )
-
     elapsed = (
         time.perf_counter()
         - start_time
     )
+
+    detailed_fields = [
+        "screenshot_id",
+        "side",
+        "slot",
+        "slot_status",
+        "hero_uid",
+        "hero_name",
+        "metric",
+        "crop_file",
+        "old_value",
+        "old_confidence",
+        "normalized_digits",
+        "value",
+        "confidence",
+        "votes",
+        "old_agreement",
+        "selected_variant",
+        "candidate_attempts",
+        "score",
+        "status",
+        "changed_from_v1",
+    ]
 
     write_csv(
         detailed_csv,
@@ -1565,9 +1455,6 @@ def main() -> int:
         output_rows,
         crop_root,
     )
-
-    if checkpoint_csv.exists():
-        checkpoint_csv.unlink()
 
     print()
     print("Résumé global V2 :")
